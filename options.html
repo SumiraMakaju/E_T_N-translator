@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TMT Translator — Settings</title>
+<link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div>
+          <div class="brand-title">TMT Translator</div>
+          <div class="brand-sub">Settings & Configuration</div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="card">
+        <div class="card-header">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/>
+            <path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          API Key
+        </div>
+        <p class="card-desc">Enter your team API key received after registration. Keep this confidential — do not share it.</p>
+
+        <div class="field-wrap">
+          <div class="input-row">
+            <input
+              type="password"
+              id="api-key-input"
+              placeholder="team_xxxxxxxxxxxxxxxx"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button id="toggle-visibility" class="icon-btn" title="Show/hide key">
+              <svg id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+              </svg>
+            </button>
+          </div>
+          <div id="key-status" class="key-status"></div>
+        </div>
+
+        <div class="btn-row">
+          <button id="save-btn" class="btn-primary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="currentColor" stroke-width="2"/>
+              <polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2"/>
+              <polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            Save Key
+          </button>
+          <button id="test-btn" class="btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Test Connection
+          </button>
+          <button id="clear-btn" class="btn-danger">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2"/>
+              <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            Clear
+          </button>
+        </div>
+
+        <div id="test-result" class="test-result" style="display:none"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+            <polyline points="12 6 12 12 16 14" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          Behavior
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Show tooltip on text selection</div>
+            <div class="toggle-desc">Automatically show the translate button when text is selected</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="auto-translate" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Auto-detect source language</div>
+            <div class="toggle-desc">Guess language from script (Devanagari = Nepali, Latin = English)</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="auto-detect" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Save translation history</div>
+            <div class="toggle-desc">Keep the last 10 translations in the popup</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="save-history" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <button id="save-prefs" class="btn-primary" style="margin-top:16px">Save Preferences</button>
+      </section>
+
+      <section class="card card-info">
+        <div class="card-header">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+            <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="2"/>
+            <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          API Reference
+        </div>
+        <div class="info-grid">
+          <div class="info-row">
+            <span class="info-label">Endpoint</span>
+            <code>https://tmt.ilprl.ku.edu.np/lang-translate</code>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Method</span>
+            <code>POST</code>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Languages</span>
+            <span class="info-val">English · Nepali · Tamang</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Shortcut</span>
+            <kbd>Alt</kbd> + <kbd>T</kbd>
+          </div>
+        </div>
+      </section>
+
+      <div class="footer-note">
+        Google TMT Hackathon 2026 · Track 1: Browser Extension ·
+        <a href="https://tmt.ilprl.ku.edu.np" target="_blank">API Docs</a>
+      </div>
+    </main>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
