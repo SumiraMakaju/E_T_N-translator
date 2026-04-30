@@ -1,23 +1,19 @@
-import {
-  translatePage,
-  restorePage,
-  cancelPageTranslation,
-  onProgress,
-  getPageTranslatedNodes,
-} from "./page-engine.js";
+// ═══════════════════════════════════════════════════════════════════════════
+// TMT Translator — content.js
+// Includes: page-engine, inline translation, tooltip, lang picker, page panel
+// ═══════════════════════════════════════════════════════════════════════════
 
-const API_URL = process.env.TMT_API_URL;
+const TMT_API_URL = process.env.TMT_API_URL;
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let tooltip       = null;
-let langPicker    = null;
-let pagePanel     = null;
+// ── SHARED STATE ─────────────────────────────────────────────────────────────
+let tooltip          = null;
+let langPicker       = null;
+let pagePanel        = null;
 let selectionTimeout = null;
 let isPageTranslating = false;
+const translatedNodes = []; // inline undo stack
 
-const translatedNodes = []; // inline (selection) undo stack
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── HELPERS ───────────────────────────────────────────────────────────────────
 function detectLanguage(text) {
   return /[\u0900-\u097F]/.test(text) ? "ne" : "en";
 }
@@ -25,25 +21,224 @@ function langName(code) {
   return { en: "English", ne: "Nepali", tmg: "Tamang" }[code] || code;
 }
 function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
-let toastEl = null, toastTimer = null;
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+let _toastEl = null, _toastTimer = null;
 function showToast(msg, duration = 2500) {
-  if (!toastEl) {
-    toastEl = document.createElement("div");
-    toastEl.id = "tmt-toast";
-    document.body.appendChild(toastEl);
+  if (!_toastEl) {
+    _toastEl = document.createElement("div");
+    _toastEl.id = "tmt-toast";
+    document.body.appendChild(_toastEl);
   }
-  toastEl.textContent = msg;
-  toastEl.classList.add("tmt-toast-visible");
-  clearTimeout(toastTimer);
-  if (duration > 0) toastTimer = setTimeout(() => toastEl?.classList.remove("tmt-toast-visible"), duration);
+  _toastEl.textContent = msg;
+  _toastEl.classList.add("tmt-toast-visible");
+  clearTimeout(_toastTimer);
+  if (duration > 0) _toastTimer = setTimeout(() => _toastEl?.classList.remove("tmt-toast-visible"), duration);
+}
+function hideToast() { _toastEl?.classList.remove("tmt-toast-visible"); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PAGE ENGINE — smart full-page translation
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SKIP_TAGS = new Set([
+  "SCRIPT","STYLE","NOSCRIPT","CODE","PRE","KBD","SAMP","VAR",
+  "MATH","SVG","CANVAS","VIDEO","AUDIO","IFRAME","OBJECT","EMBED",
+  "HEAD","META","LINK","TEMPLATE","SLOT","TMT-INLINE",
+]);
+const SKIP_ROLES    = new Set(["navigation","banner","contentinfo","search","complementary"]);
+const SKIP_CLASSES  = /\b(nav|navbar|sidebar|footer|header|breadcrumb|menu|ad|ads|cookie|captcha|code|hljs)\b/i;
+const SKIP_IDS      = /\b(nav|sidebar|footer|header|menu|cookie|ad)\b/i;
+
+const PROTECT_PATTERNS = [
+  /https?:\/\/[^\s<>"']+/g,
+  /[\w.+-]+@[\w-]+\.[a-z]{2,}/gi,
+  /\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b/g,
+  /\b[A-Z][A-Z0-9_]{2,}\b/g,
+  /\bv?\d+\.\d+(?:\.\d+)*(?:-[\w.]+)?\b/gi,
+  /\b[\w-]+\.(js|ts|jsx|tsx|py|go|rs|java|cpp|c|h|css|html|json|yaml|yml|md|txt|pdf|docx|xlsx|png|jpg|svg|env)\b/gi,
+  /\b@?[a-z][\w-]*\/[\w-]+\b/g,
+  /#[\w]+/g,
+  /@[\w]+/g,
+];
+const PROTECT_WORDS = new Set([
+  "Google","Facebook","Twitter","Instagram","YouTube","GitHub","Microsoft",
+  "Apple","Amazon","Netflix","Spotify","Slack","Discord","OpenAI","Anthropic",
+  "React","Angular","Vue","Next","Vite","Node","Python","JavaScript","TypeScript",
+  "HTML","CSS","API","SDK","UI","UX","HTTP","HTTPS","REST","JSON","XML","SQL",
+  "TMT","Nepali","Tamang","English","Nepal","Kathmandu","Dhulikhel",
+]);
+
+function maskProtected(text) {
+  const placeholders = [];
+  let masked = text;
+  for (const pattern of PROTECT_PATTERNS) {
+    masked = masked.replace(pattern, (m) => { placeholders.push(m); return `⟦${placeholders.length-1}⟧`; });
+  }
+  const wordRe = new RegExp(`\\b(${[...PROTECT_WORDS].join("|")})\\b`, "g");
+  masked = masked.replace(wordRe, (m) => { placeholders.push(m); return `⟦${placeholders.length-1}⟧`; });
+  return { masked, placeholders };
 }
 
-// ── Inline translation (selection) ────────────────────────────────────────────
+function restorePlaceholders(translated, placeholders) {
+  return translated.replace(/⟦(\d+)⟧/g, (_, i) => placeholders[Number(i)] ?? _);
+}
+
+function shouldSkipNode(el) {
+  if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+  if (SKIP_TAGS.has(el.tagName))                       return true;
+  if (el.getAttribute("translate") === "no")           return true;
+  if (el.getAttribute("contenteditable") === "true")   return true;
+  if (SKIP_ROLES.has(el.getAttribute("role")))         return true;
+  if (el.className && typeof el.className === "string" && SKIP_CLASSES.test(el.className)) return true;
+  if (el.id && SKIP_IDS.test(el.id))                  return true;
+  return false;
+}
+
+function collectTextNodes(root) {
+  const nodes = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const txt = node.textContent.trim();
+      if (!txt || txt.length < 3) return NodeFilter.FILTER_REJECT;
+      let el = node.parentElement;
+      while (el && el !== root) {
+        if (shouldSkipNode(el)) return NodeFilter.FILTER_REJECT;
+        el = el.parentElement;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+  return nodes;
+}
+
+function batchNodes(nodes) {
+  const batches = [];
+  let current = [], len = 0;
+  for (const node of nodes) {
+    const t = node.textContent.trim();
+    if (len + t.length > 400 && current.length) { batches.push(current); current = []; len = 0; }
+    current.push(node);
+    len += t.length;
+  }
+  if (current.length) batches.push(current);
+  return batches;
+}
+
+// Route ALL fetch calls through the background service worker.
+// Content scripts are blocked by page CSP on sites like Gmail, Outlook, etc.
+// The background service worker is NOT subject to page CSP.
+async function callTranslateAPI(text, src_lang, tgt_lang, _apiKey) {
+  const response = await new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      { type: "TRANSLATE", text, src_lang, tgt_lang },
+      (res) => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(res);
+      }
+    );
+  });
+  if (response?.success) return response.output;
+  if (response?.error === "NO_API_KEY") throw new Error("NO_API_KEY");
+  throw new Error(response?.error || "API error");
+}
+
+// Page engine state
+let _progressCb       = null;
+let _cancelRequested  = false;
+const _pageNodes      = [];
+
+function setProgressCallback(cb) { _progressCb = cb; }
+function cancelPageTranslation()  { _cancelRequested = true; }
+
+async function translatePage(tgt_lang, apiKey) {
+  _cancelRequested = false;
+  _pageNodes.length = 0;
+
+  // Auto-detect page source language from visible text sample
+  const sample = document.body.innerText.slice(0, 200);
+  const src_lang = detectLanguage(sample);
+
+  if (src_lang === tgt_lang) {
+    _progressCb?.({ status: "error", message: `Page already appears to be in ${langName(tgt_lang)}.` });
+    return;
+  }
+
+  const nodes = collectTextNodes(document.body);
+  if (!nodes.length) {
+    _progressCb?.({ status: "error", message: "No translatable text found on this page." });
+    return;
+  }
+
+  const batches = batchNodes(nodes);
+  let done = 0;
+  const total = nodes.length;
+
+  _progressCb?.({ status: "start", total, done: 0 });
+
+  for (const batch of batches) {
+    if (_cancelRequested) { _progressCb?.({ status: "cancelled", done, total }); return; }
+
+    for (const node of batch) {
+      if (_cancelRequested) break;
+      if (!document.contains(node)) { done++; continue; } // node may have been removed
+
+      const originalText = node.textContent;
+      const { masked, placeholders } = maskProtected(originalText.trim());
+
+      // Skip if only placeholders remain — nothing real to translate
+      if (!masked.replace(/⟦\d+⟧/g, "").trim()) { done++; continue; }
+
+      try {
+        const translated = await callTranslateAPI(masked, src_lang, tgt_lang, apiKey);
+        const restored   = restorePlaceholders(translated, placeholders);
+
+        const wrapper = document.createElement("tmt-inline");
+        wrapper.setAttribute("data-original",   originalText);
+        wrapper.setAttribute("data-translated", restored);
+        wrapper.setAttribute("data-src",        src_lang);
+        wrapper.setAttribute("data-tgt",        tgt_lang);
+        wrapper.setAttribute("data-page",       "true");
+        wrapper.className = "tmt-translated tmt-page-translated";
+        wrapper.title = `Original: ${originalText.slice(0, 80)} | "Restore page" to undo`;
+        wrapper.textContent = restored;
+
+        node.parentNode?.replaceChild(wrapper, node);
+        _pageNodes.push(wrapper);
+      } catch (err) {
+        // If API key is missing, abort the whole run immediately
+        if (err.message === "NO_API_KEY") {
+          _cancelRequested = true;
+          _progressCb?.({ status: "error", message: "No API key — open Settings to configure." });
+          return;
+        }
+        console.warn("TMT page-engine skip:", err.message);
+      }
+
+      done++;
+      _progressCb?.({ status: "progress", done, total });
+      await new Promise(r => setTimeout(r, 80)); // rate-limit
+    }
+  }
+
+  _progressCb?.({ status: "done", done, total });
+}
+
+function restorePageTranslation() {
+  const all = document.querySelectorAll("tmt-inline[data-page]");
+  all.forEach(w => w.replaceWith(document.createTextNode(w.getAttribute("data-original"))));
+  _pageNodes.length = 0;
+  return all.length;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INLINE TRANSLATION (text selection)
+// ═══════════════════════════════════════════════════════════════════════════
+
 async function translateInline(selection, tgt_lang) {
   const selectedText = selection.toString().trim();
   if (!selectedText || selectedText.length < 2) return;
@@ -60,7 +255,7 @@ async function translateInline(selection, tgt_lang) {
     chrome.runtime.sendMessage({ type: "TRANSLATE", text: selectedText, src_lang, tgt_lang }, r)
   );
 
-  toastEl?.classList.remove("tmt-toast-visible");
+  hideToast();
 
   if (!response?.success) {
     showToast("⚠ " + (response?.error === "NO_API_KEY"
@@ -77,10 +272,10 @@ async function translateInline(selection, tgt_lang) {
     const range = sel2.getRangeAt(0);
 
     const wrapper = document.createElement("tmt-inline");
-    wrapper.setAttribute("data-original", selectedText);
+    wrapper.setAttribute("data-original",   selectedText);
     wrapper.setAttribute("data-translated", response.output);
-    wrapper.setAttribute("data-src", src_lang);
-    wrapper.setAttribute("data-tgt", tgt_lang);
+    wrapper.setAttribute("data-src",        src_lang);
+    wrapper.setAttribute("data-tgt",        tgt_lang);
     wrapper.className = "tmt-translated";
     wrapper.title = `Original: ${selectedText} | Alt+Z to restore`;
     wrapper.textContent = response.output;
@@ -113,7 +308,10 @@ function deTranslateAll() {
   showToast(`↩ Restored ${all.length} translation${all.length !== 1 ? "s" : ""}`);
 }
 
-// ── PAGE TRANSLATE PANEL ──────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// PAGE TRANSLATE PANEL UI
+// ═══════════════════════════════════════════════════════════════════════════
+
 function createPagePanel() {
   const el = document.createElement("div");
   el.id = "tmt-page-panel";
@@ -128,10 +326,9 @@ function createPagePanel() {
       </div>
       <button class="tmt-pp-close" id="tmt-pp-close">✕</button>
     </div>
-
     <div class="tmt-pp-body">
-      <!-- Language selector -->
-      <div class="tmt-pp-lang-row" id="tmt-pp-setup">
+
+      <div id="tmt-pp-setup" style="display:flex;flex-direction:column;gap:14px">
         <div class="tmt-pp-lang-group">
           <span class="tmt-pp-lang-label">Translate page to</span>
           <div class="tmt-pp-lang-btns">
@@ -141,46 +338,31 @@ function createPagePanel() {
           </div>
         </div>
         <div class="tmt-pp-features">
-          <div class="tmt-pp-feature">
-            <span class="tmt-pp-feature-dot tmt-dot-skip"></span>
-            Skips code blocks &amp; pre tags
-          </div>
-          <div class="tmt-pp-feature">
-            <span class="tmt-pp-feature-dot tmt-dot-keep"></span>
-            Keeps names, URLs &amp; tech terms
-          </div>
-          <div class="tmt-pp-feature">
-            <span class="tmt-pp-feature-dot tmt-dot-smart"></span>
-            Skips nav, footer, sidebar
-          </div>
+          <div class="tmt-pp-feature"><span class="tmt-pp-feature-dot tmt-dot-skip"></span>Skips code blocks, &lt;pre&gt;, scripts</div>
+          <div class="tmt-pp-feature"><span class="tmt-pp-feature-dot tmt-dot-keep"></span>Preserves URLs, names, tech terms</div>
+          <div class="tmt-pp-feature"><span class="tmt-pp-feature-dot tmt-dot-smart"></span>Skips nav, footer, sidebar</div>
         </div>
         <button class="tmt-pp-go" id="tmt-pp-go">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-            <path d="M5 3l14 9-14 9V3z" fill="currentColor"/>
-          </svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M5 3l14 9-14 9V3z" fill="currentColor"/></svg>
           Translate Page
         </button>
       </div>
 
-      <!-- Progress view (hidden by default) -->
-      <div class="tmt-pp-progress" id="tmt-pp-progress" style="display:none">
+      <div id="tmt-pp-progress" style="display:none">
         <div class="tmt-pp-status-row">
           <span id="tmt-pp-status-text">Starting…</span>
-          <span id="tmt-pp-count">0 / 0</span>
+          <span id="tmt-pp-count" style="font-family:monospace;font-size:11px;color:#475569">0 / 0</span>
         </div>
-        <div class="tmt-pp-bar-track">
-          <div class="tmt-pp-bar-fill" id="tmt-pp-bar"></div>
-        </div>
-        <div class="tmt-pp-progress-actions">
+        <div class="tmt-pp-bar-track"><div class="tmt-pp-bar-fill" id="tmt-pp-bar"></div></div>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px">
           <button class="tmt-pp-cancel" id="tmt-pp-cancel">Cancel</button>
         </div>
       </div>
 
-      <!-- Done view (hidden by default) -->
-      <div class="tmt-pp-done" id="tmt-pp-done" style="display:none">
+      <div id="tmt-pp-done" style="display:none">
         <div class="tmt-pp-done-row">
           <div class="tmt-pp-done-icon">✓</div>
-          <div class="tmt-pp-done-info">
+          <div>
             <div class="tmt-pp-done-title" id="tmt-pp-done-title">Page translated</div>
             <div class="tmt-pp-done-sub" id="tmt-pp-done-sub"></div>
           </div>
@@ -190,10 +372,9 @@ function createPagePanel() {
           <button class="tmt-pp-again" id="tmt-pp-again">Translate again</button>
         </div>
       </div>
-    </div>
 
-    <!-- Collapse toggle -->
-    <button class="tmt-pp-collapse" id="tmt-pp-collapse" title="Minimise">
+    </div>
+    <button class="tmt-pp-collapse" id="tmt-pp-collapse" title="Collapse">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
         <path d="M19 9l-7 7-7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
@@ -202,9 +383,8 @@ function createPagePanel() {
   document.body.appendChild(el);
 
   let selectedLang = "ne";
-  let collapsed = false;
+  let collapsed    = false;
 
-  // Lang buttons
   el.querySelectorAll(".tmt-pp-lang-btn").forEach(btn => {
     btn.onclick = () => {
       el.querySelectorAll(".tmt-pp-lang-btn").forEach(b => b.classList.remove("active"));
@@ -213,102 +393,96 @@ function createPagePanel() {
     };
   });
 
-  // Collapse
   document.getElementById("tmt-pp-collapse").onclick = () => {
     collapsed = !collapsed;
     el.classList.toggle("tmt-pp-collapsed", collapsed);
-    const icon = document.querySelector("#tmt-pp-collapse svg path");
-    if (icon) icon.setAttribute("d", collapsed
-      ? "M5 15l7-7 7 7"
-      : "M19 9l-7 7-7-7");
+    const path = el.querySelector("#tmt-pp-collapse svg path");
+    if (path) path.setAttribute("d", collapsed ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7");
   };
 
-  // Close
   document.getElementById("tmt-pp-close").onclick = () => {
     if (isPageTranslating) { cancelPageTranslation(); isPageTranslating = false; }
     el.classList.remove("tmt-pp-visible");
-    setTimeout(() => { el.style.display = "none"; }, 200);
+    setTimeout(() => { el.style.display = "none"; }, 220);
   };
 
-  // Go button
   document.getElementById("tmt-pp-go").onclick = () => startPageTranslate(selectedLang);
 
-  // Cancel
   document.getElementById("tmt-pp-cancel").onclick = () => {
     cancelPageTranslation();
     isPageTranslating = false;
-    switchPanelView("setup");
+    switchView("setup");
     showToast("Translation cancelled.");
   };
 
-  // Restore
   document.getElementById("tmt-pp-restore").onclick = () => {
-    const count = restorePage();
-    deTranslateAll(); // also clear inline ones
-    switchPanelView("setup");
-    showToast(`↩ Restored ${count} element${count !== 1 ? "s" : ""}`);
+    const n = restorePageTranslation();
+    switchView("setup");
+    showToast(`↩ Restored ${n} element${n !== 1 ? "s" : ""} to original`);
   };
 
-  // Again
   document.getElementById("tmt-pp-again").onclick = () => {
-    restorePage();
-    switchPanelView("setup");
+    restorePageTranslation();
+    switchView("setup");
   };
 
   return el;
 }
 
-function switchPanelView(view) {
-  document.getElementById("tmt-pp-setup")   .style.display = view === "setup"    ? "flex"  : "none";
-  document.getElementById("tmt-pp-progress").style.display = view === "progress"  ? "block" : "none";
-  document.getElementById("tmt-pp-done")    .style.display = view === "done"      ? "block" : "none";
+function switchView(view) {
+  ["setup","progress","done"].forEach(v => {
+    const el = document.getElementById(`tmt-pp-${v}`);
+    if (el) el.style.display = v === view ? (v === "setup" ? "flex" : "block") : "none";
+  });
 }
 
 function showPagePanel() {
   if (!pagePanel) pagePanel = createPagePanel();
   pagePanel.style.display = "block";
   pagePanel.classList.remove("tmt-pp-collapsed");
+  switchView("setup");
   requestAnimationFrame(() => pagePanel.classList.add("tmt-pp-visible"));
 }
 
 async function startPageTranslate(tgt_lang) {
   if (isPageTranslating) return;
 
-  const { apiKey } = await new Promise(r => chrome.storage.sync.get("apiKey", r));
+  const result = await new Promise(r => chrome.storage.sync.get("apiKey", r));
+  const apiKey = result.apiKey;
   if (!apiKey) {
-    showToast("⚠ No API key — open Settings first.", 3500);
+    showToast("⚠ No API key — click the TMT icon → Settings to configure.", 4000);
     return;
   }
 
   isPageTranslating = true;
-  switchPanelView("progress");
+  switchView("progress");
 
-  const statusText = document.getElementById("tmt-pp-status-text");
-  const countEl    = document.getElementById("tmt-pp-count");
-  const bar        = document.getElementById("tmt-pp-bar");
+  const statusEl = document.getElementById("tmt-pp-status-text");
+  const countEl  = document.getElementById("tmt-pp-count");
+  const barEl    = document.getElementById("tmt-pp-bar");
 
-  onProgress(({ status, done, total, message }) => {
+  setProgressCallback(({ status, done, total, message }) => {
     if (status === "start") {
-      statusText.textContent = `Translating to ${langName(tgt_lang)}…`;
-      countEl.textContent = `0 / ${total}`;
-      bar.style.width = "0%";
+      statusEl.textContent = `Translating to ${langName(tgt_lang)}…`;
+      countEl.textContent  = `0 / ${total}`;
+      barEl.style.width    = "0%";
     } else if (status === "progress") {
       const pct = Math.round((done / total) * 100);
-      bar.style.width = pct + "%";
+      barEl.style.width   = pct + "%";
       countEl.textContent = `${done} / ${total}`;
-      statusText.textContent = `Translating… ${pct}%`;
+      statusEl.textContent = `Translating… ${pct}%`;
     } else if (status === "done") {
       isPageTranslating = false;
-      switchPanelView("done");
+      switchView("done");
       document.getElementById("tmt-pp-done-title").textContent =
-        `Page translated to ${langName(tgt_lang)}`;
+        `✓ Page translated to ${langName(tgt_lang)}`;
       document.getElementById("tmt-pp-done-sub").textContent =
-        `${done} text nodes translated · code & names preserved`;
+        `${done} text blocks translated · code & names preserved`;
     } else if (status === "cancelled") {
       isPageTranslating = false;
     } else if (status === "error") {
       isPageTranslating = false;
-      switchPanelView("setup");
+      switchView("setup");
       showToast("⚠ " + (message || "Page translation failed"), 4000);
     }
   });
@@ -317,12 +491,15 @@ async function startPageTranslate(tgt_lang) {
     await translatePage(tgt_lang, apiKey);
   } catch (err) {
     isPageTranslating = false;
-    switchPanelView("setup");
+    switchView("setup");
     showToast("⚠ " + err.message, 4000);
   }
 }
 
-// ── Language picker (Alt+T) ───────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// LANGUAGE PICKER (Alt+T)
+// ═══════════════════════════════════════════════════════════════════════════
+
 function createLangPicker() {
   const el = document.createElement("div");
   el.id = "tmt-lang-picker";
@@ -368,7 +545,7 @@ function showLangPicker(x, y, savedRange) {
   let left = x, top = y + 14;
   if (left + 250 > vw) left = vw - 258;
   if (left < 8) left = 8;
-  if (top + 210 > window.innerHeight + window.scrollY) top = y - 210;
+  if (top + 220 > window.innerHeight + window.scrollY) top = y - 220;
 
   langPicker.style.left = left + "px";
   langPicker.style.top  = top + "px";
@@ -378,10 +555,9 @@ function showLangPicker(x, y, savedRange) {
   langPicker.querySelectorAll(".tmt-pick-btn").forEach(btn => {
     btn.onclick = async () => {
       const tgt = btn.dataset.lang;
-      hideLangPicker(); hideTooltip();
+      hideLangPicker(); hideTooltipEl();
       if (savedRange) {
-        const sel = window.getSelection();
-        sel.removeAllRanges();
+        const sel = window.getSelection(); sel.removeAllRanges();
         try { sel.addRange(savedRange); } catch {}
       }
       await translateInline(window.getSelection(), tgt);
@@ -398,7 +574,10 @@ function hideLangPicker() {
   }
 }
 
-// ── Tooltip card (hover preview) ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// TOOLTIP (hover preview card)
+// ═══════════════════════════════════════════════════════════════════════════
+
 function createTooltip() {
   const el = document.createElement("div");
   el.id = "tmt-tooltip";
@@ -412,14 +591,22 @@ function createTooltip() {
         TMT
       </div>
       <div class="tmt-lang-row">
-        <select id="tmt-src"><option value="en">English</option><option value="ne">Nepali</option><option value="tmg">Tamang</option></select>
+        <select id="tmt-src">
+          <option value="en">English</option>
+          <option value="ne">Nepali</option>
+          <option value="tmg">Tamang</option>
+        </select>
         <button id="tmt-swap">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
             <path d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-        <select id="tmt-tgt"><option value="ne">Nepali</option><option value="en">English</option><option value="tmg">Tamang</option></select>
+        <select id="tmt-tgt">
+          <option value="ne">Nepali</option>
+          <option value="en">English</option>
+          <option value="tmg">Tamang</option>
+        </select>
       </div>
     </div>
     <div id="tmt-source-text" class="tmt-source"></div>
@@ -449,30 +636,30 @@ function createTooltip() {
 }
 
 let _savedRangeForTooltip = null;
-let _tgtLangForReplace = "ne";
+let _tgtLangForReplace    = "ne";
 
-function showTooltip(x, y, text, savedRange) {
+function showTooltipEl(x, y, text, savedRange) {
   if (!tooltip) tooltip = createTooltip();
   _savedRangeForTooltip = savedRange || null;
 
-  const srcSelect  = tooltip.querySelector("#tmt-src");
-  const tgtSelect  = tooltip.querySelector("#tmt-tgt");
-  const sourceEl   = tooltip.querySelector("#tmt-source-text");
-  const outputEl   = tooltip.querySelector("#tmt-output");
-  const copyBtn    = tooltip.querySelector("#tmt-copy");
-  const replaceBtn = tooltip.querySelector("#tmt-replace");
-  const closeBtn   = tooltip.querySelector("#tmt-close");
-  const swapBtn    = tooltip.querySelector("#tmt-swap");
+  const srcSel  = tooltip.querySelector("#tmt-src");
+  const tgtSel  = tooltip.querySelector("#tmt-tgt");
+  const srcEl   = tooltip.querySelector("#tmt-source-text");
+  const outEl   = tooltip.querySelector("#tmt-output");
+  const copyBtn = tooltip.querySelector("#tmt-copy");
+  const repBtn  = tooltip.querySelector("#tmt-replace");
+  const closeBtn= tooltip.querySelector("#tmt-close");
+  const swapBtn = tooltip.querySelector("#tmt-swap");
 
   const detected = detectLanguage(text);
-  srcSelect.value = detected;
-  tgtSelect.value = detected === "en" ? "ne" : "en";
-  _tgtLangForReplace = tgtSelect.value;
+  srcSel.value = detected;
+  tgtSel.value = detected === "en" ? "ne" : "en";
+  _tgtLangForReplace = tgtSel.value;
 
-  sourceEl.textContent = text.length > 120 ? text.slice(0, 120) + "…" : text;
-  outputEl.innerHTML = '<div class="tmt-spinner"></div>';
+  srcEl.textContent = text.length > 120 ? text.slice(0, 120) + "…" : text;
+  outEl.innerHTML   = '<div class="tmt-spinner"></div>';
   copyBtn.style.display = "none";
-  replaceBtn.style.display = "none";
+  repBtn.style.display  = "none";
 
   tooltip.style.display = "block";
   tooltip.classList.remove("tmt-visible");
@@ -487,32 +674,32 @@ function showTooltip(x, y, text, savedRange) {
   tooltip.style.top  = top + "px";
 
   requestAnimationFrame(() => tooltip.classList.add("tmt-visible"));
-  runTooltipTranslate(text, srcSelect.value, tgtSelect.value);
+  runTooltipTranslate(text, srcSel.value, tgtSel.value);
 
   const retranslate = () => {
-    if (srcSelect.value === tgtSelect.value) tgtSelect.value = srcSelect.value === "en" ? "ne" : "en";
-    _tgtLangForReplace = tgtSelect.value;
-    outputEl.innerHTML = '<div class="tmt-spinner"></div>';
-    copyBtn.style.display = "none"; replaceBtn.style.display = "none";
-    runTooltipTranslate(text, srcSelect.value, tgtSelect.value);
+    if (srcSel.value === tgtSel.value) tgtSel.value = srcSel.value === "en" ? "ne" : "en";
+    _tgtLangForReplace = tgtSel.value;
+    outEl.innerHTML = '<div class="tmt-spinner"></div>';
+    copyBtn.style.display = "none"; repBtn.style.display = "none";
+    runTooltipTranslate(text, srcSel.value, tgtSel.value);
   };
 
-  srcSelect.onchange = retranslate;
-  tgtSelect.onchange = () => { _tgtLangForReplace = tgtSelect.value; retranslate(); };
-  swapBtn.onclick = () => { [srcSelect.value, tgtSelect.value] = [tgtSelect.value, srcSelect.value]; _tgtLangForReplace = tgtSelect.value; retranslate(); };
-  closeBtn.onclick = hideTooltip;
+  srcSel.onchange = retranslate;
+  tgtSel.onchange = () => { _tgtLangForReplace = tgtSel.value; retranslate(); };
+  swapBtn.onclick = () => { [srcSel.value, tgtSel.value] = [tgtSel.value, srcSel.value]; _tgtLangForReplace = tgtSel.value; retranslate(); };
+  closeBtn.onclick = hideTooltipEl;
 
   copyBtn.onclick = () => {
-    const result = outputEl.querySelector(".tmt-result");
-    if (!result) return;
-    navigator.clipboard.writeText(result.textContent).then(() => {
+    const r = outEl.querySelector(".tmt-result");
+    if (!r) return;
+    navigator.clipboard.writeText(r.textContent).then(() => {
       copyBtn.textContent = "Copied!";
       setTimeout(() => { copyBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/></svg> Copy`; }, 1500);
     });
   };
 
-  replaceBtn.onclick = async () => {
-    hideTooltip();
+  repBtn.onclick = async () => {
+    hideTooltipEl();
     if (_savedRangeForTooltip) {
       const sel = window.getSelection(); sel.removeAllRanges();
       try { sel.addRange(_savedRangeForTooltip); } catch {}
@@ -522,65 +709,69 @@ function showTooltip(x, y, text, savedRange) {
 }
 
 function runTooltipTranslate(text, src_lang, tgt_lang) {
-  const outputEl  = tooltip?.querySelector("#tmt-output");
-  const copyBtn   = tooltip?.querySelector("#tmt-copy");
-  const replaceBtn= tooltip?.querySelector("#tmt-replace");
+  const outEl   = tooltip?.querySelector("#tmt-output");
+  const copyBtn = tooltip?.querySelector("#tmt-copy");
+  const repBtn  = tooltip?.querySelector("#tmt-replace");
 
   chrome.runtime.sendMessage({ type: "TRANSLATE", text, src_lang, tgt_lang }, (res) => {
-    if (!outputEl) return;
+    if (!outEl) return;
     if (res?.success) {
-      outputEl.innerHTML = `<div class="tmt-result">${escapeHtml(res.output)}</div>`;
+      outEl.innerHTML = `<div class="tmt-result">${escapeHtml(res.output)}</div>`;
       copyBtn && (copyBtn.style.display = "flex");
-      replaceBtn && (replaceBtn.style.display = "flex");
+      repBtn  && (repBtn.style.display  = "flex");
     } else if (res?.error === "NO_API_KEY") {
-      outputEl.innerHTML = `<div class="tmt-error">⚠ No API key. <a href="#" id="tmt-open-options">Configure →</a></div>`;
-      document.getElementById("tmt-open-options")?.addEventListener("click", e => {
+      outEl.innerHTML = `<div class="tmt-error">⚠ No API key. <a href="#" id="tmt-open-opts">Configure →</a></div>`;
+      document.getElementById("tmt-open-opts")?.addEventListener("click", e => {
         e.preventDefault(); chrome.runtime.sendMessage({ type: "OPEN_OPTIONS" });
       });
     } else {
-      outputEl.innerHTML = `<div class="tmt-error">⚠ ${escapeHtml(res?.error || "Translation failed")}</div>`;
+      outEl.innerHTML = `<div class="tmt-error">⚠ ${escapeHtml(res?.error || "Translation failed")}</div>`;
     }
   });
 }
 
-function hideTooltip() {
+function hideTooltipEl() {
   if (tooltip) {
     tooltip.classList.remove("tmt-visible");
     setTimeout(() => { tooltip && (tooltip.style.display = "none"); }, 200);
   }
 }
 
-// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════════════════════════════════════════
+
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") { hideTooltip(); hideLangPicker(); return; }
+  if (e.key === "Escape") { hideTooltipEl(); hideLangPicker(); return; }
 
   if (e.altKey && !e.shiftKey && e.key.toLowerCase() === "t") {
     e.preventDefault();
     const sel = window.getSelection(), text = sel?.toString().trim();
     if (!text || text.length < 2) { showToast("✋ Select text first, then press Alt+T"); return; }
-    let savedRange = null;
-    try { savedRange = sel.getRangeAt(0).cloneRange(); } catch {}
+    let sr = null; try { sr = sel.getRangeAt(0).cloneRange(); } catch {}
     const rect = sel.getRangeAt(0).getBoundingClientRect();
-    hideTooltip();
-    showLangPicker(rect.left + window.scrollX, rect.bottom + window.scrollY, savedRange);
+    hideTooltipEl();
+    showLangPicker(rect.left + window.scrollX, rect.bottom + window.scrollY, sr);
     return;
   }
 
   if (e.altKey && !e.shiftKey && e.key.toLowerCase() === "z") {
-    e.preventDefault(); hideLangPicker(); hideTooltip(); deTranslateLast(); return;
+    e.preventDefault(); hideLangPicker(); hideTooltipEl(); deTranslateLast(); return;
   }
 
   if (e.altKey && e.shiftKey && e.key.toLowerCase() === "z") {
-    e.preventDefault(); hideLangPicker(); hideTooltip(); deTranslateAll(); return;
+    e.preventDefault(); hideLangPicker(); hideTooltipEl(); deTranslateAll(); return;
   }
 
-  // Alt+P — open page translate panel
   if (e.altKey && !e.shiftKey && e.key.toLowerCase() === "p") {
     e.preventDefault(); showPagePanel(); return;
   }
 });
 
-// ── Mouse selection → tooltip ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// MOUSE SELECTION → TOOLTIP
+// ═══════════════════════════════════════════════════════════════════════════
+
 document.addEventListener("mouseup", (e) => {
   if (tooltip?.contains(e.target) || langPicker?.contains(e.target) || pagePanel?.contains(e.target)) return;
   clearTimeout(selectionTimeout);
@@ -589,10 +780,9 @@ document.addEventListener("mouseup", (e) => {
     if (text && text.length > 1 && text.length < 1000) {
       if (langPicker?.classList.contains("tmt-picker-visible")) return;
       const range = sel.getRangeAt(0), rect = range.getBoundingClientRect();
-      let savedRange = null;
-      try { savedRange = range.cloneRange(); } catch {}
-      showTooltip(rect.left + window.scrollX, rect.bottom + window.scrollY, text, savedRange);
-    } else if (!text) { hideTooltip(); hideLangPicker(); }
+      let sr = null; try { sr = range.cloneRange(); } catch {}
+      showTooltipEl(rect.left + window.scrollX, rect.bottom + window.scrollY, text, sr);
+    } else if (!text) { hideTooltipEl(); hideLangPicker(); }
   }, 350);
 });
 
@@ -600,19 +790,21 @@ document.addEventListener("mousedown", (e) => {
   if (langPicker?.classList.contains("tmt-picker-visible") && !langPicker.contains(e.target)) hideLangPicker();
 });
 
-// ── Messages from background ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// MESSAGES FROM BACKGROUND
+// ═══════════════════════════════════════════════════════════════════════════
+
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "TRANSLATE_SELECTION" || msg.type === "KEYBOARD_TRANSLATE") {
     const sel = window.getSelection(), text = msg.text || sel?.toString().trim();
     if (text) {
       const range = sel?.rangeCount > 0 ? sel.getRangeAt(0) : null;
-      const rect = range ? range.getBoundingClientRect() : { left: window.innerWidth / 2, bottom: 100 };
-      let savedRange = null;
-      try { if (range) savedRange = range.cloneRange(); } catch {}
-      showTooltip(rect.left + window.scrollX, rect.bottom + window.scrollY, text, savedRange);
+      const rect  = range ? range.getBoundingClientRect() : { left: window.innerWidth / 2, bottom: 100 };
+      let sr = null; try { if (range) sr = range.cloneRange(); } catch {}
+      showTooltipEl(rect.left + window.scrollX, rect.bottom + window.scrollY, text, sr);
     }
   }
-  if (msg.type === "OPEN_PAGE_PANEL")   showPagePanel();
-  if (msg.type === "DETRANSLATE_LAST")  deTranslateLast();
-  if (msg.type === "DETRANSLATE_ALL")   deTranslateAll();
+  if (msg.type === "OPEN_PAGE_PANEL")  showPagePanel();
+  if (msg.type === "DETRANSLATE_LAST") deTranslateLast();
+  if (msg.type === "DETRANSLATE_ALL")  deTranslateAll();
 });
