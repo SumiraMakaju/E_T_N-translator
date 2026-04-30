@@ -13,7 +13,7 @@ let selectionTimeout = null;
 let isPageTranslating = false;
 const translatedNodes = []; // inline undo stack
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
+//  HELPERS 
 function detectLanguage(text) {
   return /[\u0900-\u097F]/.test(text) ? "ne" : "en";
 }
@@ -24,7 +24,7 @@ function escapeHtml(str) {
   return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
-// ── TOAST ─────────────────────────────────────────────────────────────────────
+//  TOAST 
 let _toastEl = null, _toastTimer = null;
 function showToast(msg, duration = 2500) {
   if (!_toastEl) {
@@ -39,9 +39,7 @@ function showToast(msg, duration = 2500) {
 }
 function hideToast() { _toastEl?.classList.remove("tmt-toast-visible"); }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // PAGE ENGINE — smart full-page translation
-// ═══════════════════════════════════════════════════════════════════════════
 
 const SKIP_TAGS = new Set([
   "SCRIPT","STYLE","NOSCRIPT","CODE","PRE","KBD","SAMP","VAR",
@@ -52,67 +50,51 @@ const SKIP_ROLES    = new Set(["navigation","banner","contentinfo","search","com
 const SKIP_CLASSES  = /\b(nav|navbar|sidebar|footer|header|breadcrumb|menu|ad|ads|cookie|captcha|code|hljs)\b/i;
 const SKIP_IDS      = /\b(nav|sidebar|footer|header|menu|cookie|ad)\b/i;
 
-const PROTECT_PATTERNS = [
-  /https?:\/\/[^\s<>"']+/g,
-  /[\w.+-]+@[\w-]+\.[a-z]{2,}/gi,
-  /\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b/g,
-  /\b[A-Z][A-Z0-9_]{2,}\b/g,
-  /\bv?\d+\.\d+(?:\.\d+)*(?:-[\w.]+)?\b/gi,
-  /\b[\w-]+\.(js|ts|jsx|tsx|py|go|rs|java|cpp|c|h|css|html|json|yaml|yml|md|txt|pdf|docx|xlsx|png|jpg|svg|env)\b/gi,
-  /\b@?[a-z][\w-]*\/[\w-]+\b/g,
-  /#[\w]+/g,
-  /@[\w]+/g,
-];
-const PROTECT_WORDS = new Set([
-  "Google","Facebook","Twitter","Instagram","YouTube","GitHub","Microsoft",
-  "Apple","Amazon","Netflix","Spotify","Slack","Discord","OpenAI","Anthropic",
-  "React","Angular","Vue","Next","Vite","Node","Python","JavaScript","TypeScript",
-  "HTML","CSS","API","SDK","UI","UX","HTTP","HTTPS","REST","JSON","XML","SQL",
-  "TMT","Nepali","Tamang","English","Nepal","Kathmandu","Dhulikhel",
-]);
-
-function maskProtected(text) {
-  const placeholders = [];
-  let masked = text;
-  for (const pattern of PROTECT_PATTERNS) {
-    masked = masked.replace(pattern, (m) => { placeholders.push(m); return `⟦${placeholders.length-1}⟧`; });
-  }
-  const wordRe = new RegExp(`\\b(${[...PROTECT_WORDS].join("|")})\\b`, "g");
-  masked = masked.replace(wordRe, (m) => { placeholders.push(m); return `⟦${placeholders.length-1}⟧`; });
-  return { masked, placeholders };
-}
-
-function restorePlaceholders(translated, placeholders) {
-  return translated.replace(/⟦(\d+)⟧/g, (_, i) => placeholders[Number(i)] ?? _);
-}
-
 function shouldSkipNode(el) {
   if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
-  if (SKIP_TAGS.has(el.tagName))                       return true;
-  if (el.getAttribute("translate") === "no")           return true;
-  if (el.getAttribute("contenteditable") === "true")   return true;
-  if (SKIP_ROLES.has(el.getAttribute("role")))         return true;
-  if (el.className && typeof el.className === "string" && SKIP_CLASSES.test(el.className)) return true;
-  if (el.id && SKIP_IDS.test(el.id))                  return true;
+
+  const tag = el.tagName;
+
+  if ([
+    "SCRIPT","STYLE","NOSCRIPT","CODE","PRE",
+    "INPUT","TEXTAREA","A","BUTTON","SELECT"
+  ].includes(tag)) return true;
+
+  if (el.closest("[contenteditable='true']")) return true;
+
+  // Skip Gmail / dynamic UI areas
+  if (el.closest("[role='navigation'], [role='toolbar'], [aria-label]")) return true;
+
   return false;
 }
-
 function collectTextNodes(root) {
   const nodes = [];
+
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
-      const txt = node.textContent.trim();
-      if (!txt || txt.length < 3) return NodeFilter.FILTER_REJECT;
+      const text = node.textContent.trim();
+
+      if (!text || text.length < 3) return NodeFilter.FILTER_REJECT;
+
+      // ❌ Skip emails / URLs inside text
+      if (
+        /\bhttps?:\/\//i.test(text) ||
+        /\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b/i.test(text)
+      ) return NodeFilter.FILTER_REJECT;
+
       let el = node.parentElement;
       while (el && el !== root) {
         if (shouldSkipNode(el)) return NodeFilter.FILTER_REJECT;
         el = el.parentElement;
       }
+
       return NodeFilter.FILTER_ACCEPT;
     }
   });
+
   let n;
   while ((n = walker.nextNode())) nodes.push(n);
+
   return nodes;
 }
 
@@ -188,24 +170,22 @@ async function translatePage(tgt_lang, apiKey) {
       if (!document.contains(node)) { done++; continue; } // node may have been removed
 
       const originalText = node.textContent;
-      const { masked, placeholders } = maskProtected(originalText.trim());
-
-      // Skip if only placeholders remain — nothing real to translate
-      if (!masked.replace(/⟦\d+⟧/g, "").trim()) { done++; continue; }
 
       try {
-        const translated = await callTranslateAPI(masked, src_lang, tgt_lang, apiKey);
-        const restored   = restorePlaceholders(translated, placeholders);
+        // masking & protection handled inside background.js for all paths
+        const translated = await callTranslateAPI(originalText.trim(), src_lang, tgt_lang, apiKey);
+        // If background skipped it (all protected), translated === originalText — still wrap so restore works
+        if (!translated || translated === originalText.trim()) { done++; _progressCb?.({ status: "progress", done, total }); continue; }
 
         const wrapper = document.createElement("tmt-inline");
         wrapper.setAttribute("data-original",   originalText);
-        wrapper.setAttribute("data-translated", restored);
+        wrapper.setAttribute("data-translated", translated);
         wrapper.setAttribute("data-src",        src_lang);
         wrapper.setAttribute("data-tgt",        tgt_lang);
         wrapper.setAttribute("data-page",       "true");
         wrapper.className = "tmt-translated tmt-page-translated";
-        wrapper.title = `Original: ${originalText.slice(0, 80)} | "Restore page" to undo`;
-        wrapper.textContent = restored;
+        wrapper.title = `Original: ${originalText.slice(0, 80)}`;
+        wrapper.textContent = translated;   // ← fixed: was using undefined `restored`
 
         node.parentNode?.replaceChild(wrapper, node);
         _pageNodes.push(wrapper);
@@ -235,9 +215,9 @@ function restorePageTranslation() {
   return all.length;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+
 // INLINE TRANSLATION (text selection)
-// ═══════════════════════════════════════════════════════════════════════════
+
 
 async function translateInline(selection, tgt_lang) {
   const selectedText = selection.toString().trim();
@@ -308,9 +288,9 @@ function deTranslateAll() {
   showToast(`↩ Restored ${all.length} translation${all.length !== 1 ? "s" : ""}`);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+
 // PAGE TRANSLATE PANEL UI
-// ═══════════════════════════════════════════════════════════════════════════
+
 
 function createPagePanel() {
   const el = document.createElement("div");
@@ -496,9 +476,7 @@ async function startPageTranslate(tgt_lang) {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // LANGUAGE PICKER (Alt+T)
-// ═══════════════════════════════════════════════════════════════════════════
 
 function createLangPicker() {
   const el = document.createElement("div");
@@ -574,9 +552,8 @@ function hideLangPicker() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+
 // TOOLTIP (hover preview card)
-// ═══════════════════════════════════════════════════════════════════════════
 
 function createTooltip() {
   const el = document.createElement("div");
@@ -737,9 +714,8 @@ function hideTooltipEl() {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // KEYBOARD SHORTCUTS
-// ═══════════════════════════════════════════════════════════════════════════
+
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") { hideTooltipEl(); hideLangPicker(); return; }
@@ -768,9 +744,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // MOUSE SELECTION → TOOLTIP
-// ═══════════════════════════════════════════════════════════════════════════
 
 document.addEventListener("mouseup", (e) => {
   if (tooltip?.contains(e.target) || langPicker?.contains(e.target) || pagePanel?.contains(e.target)) return;
@@ -790,9 +764,7 @@ document.addEventListener("mousedown", (e) => {
   if (langPicker?.classList.contains("tmt-picker-visible") && !langPicker.contains(e.target)) hideLangPicker();
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // MESSAGES FROM BACKGROUND
-// ═══════════════════════════════════════════════════════════════════════════
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "TRANSLATE_SELECTION" || msg.type === "KEYBOARD_TRANSLATE") {
@@ -807,4 +779,14 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "OPEN_PAGE_PANEL")  showPagePanel();
   if (msg.type === "DETRANSLATE_LAST") deTranslateLast();
   if (msg.type === "DETRANSLATE_ALL")  deTranslateAll();
+});
+
+
+const observer = new MutationObserver(() => {
+  if (isPageTranslating) return;
+});
+
+observer.observe(document.body, {
+  childList: true,
+  subtree: true
 });
