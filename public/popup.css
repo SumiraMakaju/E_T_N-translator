@@ -331,3 +331,50 @@ footer {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.page-translate-btn {
+  margin: 12px 16px 0;
+  background: #0f172a;
+  color: #38bdf8;
+  border: 1px solid rgba(56,189,248,0.25);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: calc(100% - 32px);
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.page-translate-btn:hover {
+  background: rgba(56,189,248,0.08);
+  border-color: rgba(56,189,248,0.4);
+}
+.page-translate-btn kbd {
+  font-size: 10px;
+  background: rgba(56,189,248,0.1);
+  border: 1px solid rgba(56,189,248,0.2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: inherit;
+  color: #38bdf8;
+  margin-left: 2px;
+}
+.divider-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 16px 0;
+  color: #334155;
+  font-size: 11px;
+}
+.divider-or::before,.divider-or::after {
+  content:'';
+  flex:1;
+  height:1px;
+  background:rgba(255,255,255,0.06);
+}

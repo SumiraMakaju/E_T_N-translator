@@ -1,16 +1,18 @@
 {
   "manifest_version": 3,
   "name": "TMT Translator — English · Nepali · Tamang",
-  "version": "1.0.0",
-  "description": "Real-time trilingual translation powered by Google TMT. Translate any selected text between English, Nepali, and Tamang instantly.",
+  "version": "2.0.0",
+  "description": "Smart trilingual translation powered by Google TMT. Translate selections or entire pages between English, Nepali, and Tamang.",
   "permissions": [
     "activeTab",
     "storage",
     "contextMenus",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
-    "https://tmt.ilprl.ku.edu.np/*"
+    "https://tmt.ilprl.ku.edu.np/*",
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
@@ -43,18 +45,16 @@
   },
   "commands": {
     "translate-selection": {
-      "suggested_key": {
-        "default": "Alt+T",
-        "mac": "Alt+T"
-      },
+      "suggested_key": { "default": "Alt+T", "mac": "Alt+T" },
       "description": "Open language picker for selected text"
     },
     "detranslate-last": {
-      "suggested_key": {
-        "default": "Alt+Z",
-        "mac": "Alt+Z"
-      },
+      "suggested_key": { "default": "Alt+Z", "mac": "Alt+Z" },
       "description": "Undo last inline translation"
+    },
+    "open-page-panel": {
+      "suggested_key": { "default": "Alt+P", "mac": "Alt+P" },
+      "description": "Open Smart Page Translate panel"
     }
   }
 }
