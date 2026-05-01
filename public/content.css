@@ -679,3 +679,102 @@ tmt-inline.tmt-page-translated {
 tmt-inline.tmt-page-translated:hover {
   background: rgba(56, 189, 248, 0.16);
 }
+
+/* ── VOICE / PRONUNCIATION ───────────────────────────────────────────────── */
+.tmt-source-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.tmt-source-wrap .tmt-source {
+  padding: 0;
+  border: none;
+  flex: 1;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.5;
+  max-height: 56px;
+  overflow: hidden;
+}
+
+.tmt-speak-icon {
+  background: transparent;
+  border: none;
+  color: #475569;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  transition: color 0.15s;
+  margin-top: 1px;
+}
+.tmt-speak-icon:hover { color: #38bdf8; }
+
+/* Accent selector strip */
+.tmt-accent-wrap {
+  padding: 6px 12px 2px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.tmt-accent-row {
+  display: flex;
+  gap: 5px;
+}
+
+.tmt-accent-btn {
+  flex: 1;
+  background: #1e293b;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 5px;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 4px 3px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.13s;
+  text-align: center;
+  white-space: nowrap;
+}
+.tmt-accent-btn:hover {
+  border-color: rgba(56,189,248,0.25);
+  color: #94a3b8;
+}
+.tmt-accent-btn.active {
+  background: rgba(56,189,248,0.12);
+  border-color: rgba(56,189,248,0.4);
+  color: #38bdf8;
+}
+
+/* Speak output button */
+.tmt-btn-speak {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(56,189,248,0.08);
+  color: #38bdf8;
+  border: 1px solid rgba(56,189,248,0.2);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.13s;
+}
+.tmt-btn-speak:hover { background: rgba(56,189,248,0.16); }
+.tmt-btn-speak.tmt-speak-active {
+  background: rgba(56,189,248,0.22);
+  border-color: rgba(56,189,248,0.5);
+  animation: tmt-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes tmt-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(56,189,248,0.3); }
+  50%       { box-shadow: 0 0 0 4px rgba(56,189,248,0); }
+}
