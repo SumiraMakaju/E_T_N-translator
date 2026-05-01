@@ -104,7 +104,6 @@ function showTestResult(success, message) {
 
 init();
 
-// ── OpenAI Key (for Whisper video transcription) ──────────────────────────────
 const openaiInput  = document.getElementById("openai-key-input");
 const openaiStatus = document.getElementById("openai-key-status");
 const openaiSave   = document.getElementById("openai-save-btn");

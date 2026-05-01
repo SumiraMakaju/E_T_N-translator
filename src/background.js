@@ -1,11 +1,5 @@
 const API_URL = process.env.TMT_API_URL;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SMART CONTENT PROTECTION
-// splitText() breaks any string into alternating { type:"protected"|"text" }
-// parts. Protected parts are passed through unchanged; text parts go to API.
-// ═══════════════════════════════════════════════════════════════════════════
-
 const EMAIL_RE = /\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b/gi;
 const URL_RE   = /\bhttps?:\/\/[^\s<>"'`]+/gi;
 const CODE_RE  = /`[^`\n]{1,200}`/g;
@@ -62,9 +56,7 @@ function splitText(text) {
   return parts;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
 // CONTEXT MENU
-// ═══════════════════════════════════════════════════════════════════════════
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
@@ -111,9 +103,7 @@ chrome.commands.onCommand.addListener(async command => {
   if (command === "open-page-panel")     safeSend(tab.id, { type: "OPEN_PAGE_PANEL" });
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // TRANSLATION HANDLER
-// ═══════════════════════════════════════════════════════════════════════════
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "TRANSLATE") {
@@ -193,10 +183,7 @@ async function saveToHistory(entry) {
   const updated = [{ ...entry, timestamp: Date.now() }, ...history].slice(0, 10);
   await chrome.storage.local.set({ history: updated });
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
 // VIDEO TRANSLATION — Whisper + Tab Capture
-// ═══════════════════════════════════════════════════════════════════════════
 
 const WHISPER_URL = "https://api.openai.com/v1/audio/transcriptions";
 

@@ -1037,9 +1037,7 @@ document.addEventListener("mousedown", (e) => {
     hideLangPicker();
 });
 
-// ═══════════════════════════════════════════════════════════════════════════
 // MESSAGES FROM BACKGROUND
-// ═══════════════════════════════════════════════════════════════════════════
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (!isExtensionAlive()) return;

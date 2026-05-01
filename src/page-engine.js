@@ -1,9 +1,6 @@
-// page-engine.js — Smart full-page translation
-// Skips code, preserves proper nouns/technical terms, batches API calls
-
 const API_URL = process.env.TMT_API_URL;
 
-// ── Elements to NEVER translate ───────────────────────────────────────────────
+//  Elements to NEVER translate 
 const SKIP_TAGS = new Set([
   "SCRIPT","STYLE","NOSCRIPT","CODE","PRE","KBD","SAMP","VAR",
   "MATH","SVG","CANVAS","VIDEO","AUDIO","IFRAME","OBJECT","EMBED",
@@ -15,7 +12,7 @@ const SKIP_ROLES = new Set(["navigation","banner","contentinfo","search","comple
 const SKIP_CLASSES = /\b(nav|navbar|sidebar|footer|header|breadcrumb|menu|ad|ads|cookie|captcha|code|hljs)\b/i;
 const SKIP_IDS     = /\b(nav|sidebar|footer|header|menu|cookie|ad)\b/i;
 
-// ── Technical term patterns to protect ───────────────────────────────────────
+//  Technical term patterns to protect 
 // These are masked before sending to the API and restored after
 const PROTECT_PATTERNS = [
   // URLs
@@ -47,7 +44,7 @@ const PROTECT_WORDS = new Set([
   "TMT","Nepali","Tamang","English","Nepal","Kathmandu","Dhulikhel",
 ]);
 
-// ── Masking ───────────────────────────────────────────────────────────────────
+//  Masking 
 function maskProtected(text) {
   const placeholders = [];
 
@@ -77,7 +74,7 @@ function restorePlaceholders(translated, placeholders) {
   return translated.replace(/⟦(\d+)⟧/g, (_, i) => placeholders[Number(i)] ?? _);
 }
 
-// ── DOM walking ───────────────────────────────────────────────────────────────
+//  DOM walking 
 function shouldSkipNode(node) {
   if (node.nodeType !== Node.ELEMENT_NODE) return false;
   const el = node;
@@ -112,7 +109,7 @@ function collectTextNodes(root) {
   return nodes;
 }
 
-// ── Batching ──────────────────────────────────────────────────────────────────
+//  Batching 
 // Group text nodes into batches ≤ 500 chars to stay within API sentence limits
 function batchNodes(nodes) {
   const batches = [];
@@ -132,7 +129,7 @@ function batchNodes(nodes) {
   return batches;
 }
 
-// ── API call (single sentence) ────────────────────────────────────────────────
+//  API call (single sentence) 
 async function callTranslate(text, src_lang, tgt_lang, apiKey) {
   const res = await fetch(API_URL, {
     method: "POST",
@@ -147,7 +144,7 @@ async function callTranslate(text, src_lang, tgt_lang, apiKey) {
   throw new Error(data.message || "API error");
 }
 
-// ── Progress tracking ─────────────────────────────────────────────────────────
+//  Progress tracking 
 let _progressCallback = null;
 let _cancelRequested  = false;
 const _pageTranslatedNodes = [];
@@ -156,7 +153,7 @@ export function onProgress(cb) { _progressCallback = cb; }
 export function cancelPageTranslation() { _cancelRequested = true; }
 export function getPageTranslatedNodes() { return _pageTranslatedNodes; }
 
-// ── Main entry ────────────────────────────────────────────────────────────────
+//  Main entry 
 export async function translatePage(tgt_lang, apiKey) {
   _cancelRequested = false;
   _pageTranslatedNodes.length = 0;
@@ -227,7 +224,7 @@ export async function translatePage(tgt_lang, apiKey) {
   _progressCallback?.({ status: "done", done, total });
 }
 
-// ── Restore page ──────────────────────────────────────────────────────────────
+//  Restore page 
 export function restorePage() {
   const all = document.querySelectorAll("tmt-inline[data-page]");
   all.forEach(w => w.replaceWith(document.createTextNode(w.getAttribute("data-original"))));

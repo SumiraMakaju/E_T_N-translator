@@ -694,11 +694,6 @@ function renderSubtitle(text, durationMs) {
   if (wrap) wrap.style.display = "block";
 }
 
-// Replace the global showSubtitle with the pill version
-// (redefine so all callers  YouTube and Whisper  use it)
-
-// LIFECYCLE
-
 
 function stopTranslation() {
   isTranslating = false;
