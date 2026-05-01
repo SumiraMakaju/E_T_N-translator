@@ -17,7 +17,7 @@ const BRAND_WORDS = [
   "Python","JavaScript","TypeScript","Kotlin","Swift","Rust","Go","PHP","Ruby",
   "HTML","CSS","API","SDK","CLI","HTTP","HTTPS","REST","GraphQL","JSON","XML",
   "SQL","MongoDB","Redis","PostgreSQL","MySQL","Docker","Kubernetes","Linux","Ubuntu",
-  "TMT","Nepal","Kathmandu","Dhulikhel","Nepali","Tamang",
+  "TMT"
 ];
 
 // One combined regex that matches anything we want to protect
