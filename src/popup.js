@@ -138,3 +138,16 @@ function escapeHtml(str) {
 }
 
 init();
+
+// Video translate button
+document.getElementById("video-translate-btn")?.addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) return;
+  chrome.tabs.sendMessage(tab.id, { type: "OPEN_VIDEO_PANEL" }).catch(() => {
+    chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["video-engine.js"] })
+      .then(() => new Promise(r => setTimeout(r, 150)))
+      .then(() => chrome.tabs.sendMessage(tab.id, { type: "OPEN_VIDEO_PANEL" }))
+      .catch(console.warn);
+  });
+  window.close();
+});

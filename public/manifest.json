@@ -1,17 +1,19 @@
 {
   "manifest_version": 3,
   "name": "TMT Translator — English · Nepali · Tamang",
-  "version": "2.0.0",
-  "description": "Smart trilingual translation powered by Google TMT. Translate selections or entire pages between English, Nepali, and Tamang.",
+  "version": "3.0.0",
+  "description": "Smart trilingual translation with page translate, voice playback, video subtitle translation via Whisper + YouTube captions.",
   "permissions": [
     "activeTab",
     "storage",
     "contextMenus",
     "scripting",
-    "tabs"
+    "tabs",
+    "tabCapture"
   ],
   "host_permissions": [
     "https://tmt.ilprl.ku.edu.np/*",
+    "https://api.openai.com/*",
     "<all_urls>"
   ],
   "background": {
@@ -22,6 +24,11 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "css": ["content.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["video-engine.js"],
       "run_at": "document_idle"
     }
   ],
@@ -55,6 +62,10 @@
     "open-page-panel": {
       "suggested_key": { "default": "Alt+P", "mac": "Alt+P" },
       "description": "Open Smart Page Translate panel"
+    },
+    "open-video-panel": {
+      "suggested_key": { "default": "Alt+V", "mac": "Alt+V" },
+      "description": "Open Video Subtitle Translate panel"
     }
   }
 }
