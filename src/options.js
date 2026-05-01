@@ -103,3 +103,38 @@ function showTestResult(success, message) {
 }
 
 init();
+
+// ── OpenAI Key (for Whisper video transcription) ──────────────────────────────
+const openaiInput  = document.getElementById("openai-key-input");
+const openaiStatus = document.getElementById("openai-key-status");
+const openaiSave   = document.getElementById("openai-save-btn");
+const openaiClear  = document.getElementById("openai-clear-btn");
+const openaiToggle = document.getElementById("openai-toggle-vis");
+
+async function initOpenAI() {
+  const { openaiKey } = await chrome.storage.sync.get("openaiKey");
+  if (openaiKey && openaiInput) {
+    openaiInput.value = openaiKey;
+    if (openaiStatus) { openaiStatus.textContent = "✓ OpenAI key saved"; openaiStatus.className = "key-status saved"; }
+  }
+}
+initOpenAI();
+
+openaiToggle?.addEventListener("click", () => {
+  if (!openaiInput) return;
+  openaiInput.type = openaiInput.type === "password" ? "text" : "password";
+});
+
+openaiSave?.addEventListener("click", async () => {
+  const key = openaiInput?.value.trim();
+  if (!key) { if (openaiStatus) { openaiStatus.textContent = "Enter a key first."; openaiStatus.className = "key-status error"; } return; }
+  await chrome.storage.sync.set({ openaiKey: key });
+  if (openaiStatus) { openaiStatus.textContent = "✓ OpenAI key saved!"; openaiStatus.className = "key-status saved"; }
+  setTimeout(() => { if (openaiStatus) openaiStatus.textContent = ""; }, 3000);
+});
+
+openaiClear?.addEventListener("click", async () => {
+  await chrome.storage.sync.remove("openaiKey");
+  if (openaiInput) openaiInput.value = "";
+  if (openaiStatus) { openaiStatus.textContent = "OpenAI key cleared."; openaiStatus.className = "key-status info"; }
+});
