@@ -1,14 +1,7 @@
-// ═══════════════════════════════════════════════════════════════════════════
-// TMT Video Engine — content script
-// Detects <video> on any page, shows floating control panel.
-// YouTube: grabs caption track → translates via TMT → overlays.
-// General: tab audio capture → Whisper chunks → TMT → subtitle overlay.
-// ═══════════════════════════════════════════════════════════════════════════
-
 const TMT_SUBTITLE_ID = "tmt-subtitle-overlay";
 const TMT_PANEL_ID    = "tmt-video-panel";
 
-// ── Context guard (same as content.js) ───────────────────────────────────────
+//  Context guard 
 function isAlive() { try { return !!chrome.runtime?.id; } catch { return false; } }
 function safeSend(msg, cb) {
   if (!isAlive()) return;
@@ -16,7 +9,7 @@ function safeSend(msg, cb) {
   catch {}
 }
 
-// ── State ─────────────────────────────────────────────────────────────────────
+
 let activeVideo   = null;
 let subtitleEl    = null;
 let panelEl       = null;

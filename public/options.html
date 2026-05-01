@@ -155,6 +155,34 @@
         Google TMT Hackathon 2026 · Track 1: Browser Extension ·
         <a href="https://tmt.ilprl.ku.edu.np" target="_blank">API Docs</a>
       </div>
+    
+      <section class="card" style="border-color:rgba(167,139,250,0.15)">
+        <div class="card-header" style="color:#a78bfa">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+            <path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          OpenAI API Key (for Whisper Video Transcription)
+        </div>
+        <p class="card-desc">Required only for video audio transcription on non-YouTube sites. Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:#a78bfa">platform.openai.com</a>. YouTube captions work without this key.</p>
+        <div class="field-wrap">
+          <div class="input-row">
+            <input type="password" id="openai-key-input" placeholder="sk-..." autocomplete="off" spellcheck="false"/>
+            <button id="openai-toggle-vis" class="icon-btn" title="Show/hide">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/>
+                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+              </svg>
+            </button>
+          </div>
+          <div id="openai-key-status" class="key-status"></div>
+        </div>
+        <div class="btn-row">
+          <button id="openai-save-btn" class="btn-primary">Save OpenAI Key</button>
+          <button id="openai-clear-btn" class="btn-danger">Clear</button>
+        </div>
+      </section>
+
     </main>
   </div>
   <script src="options.js"></script>
