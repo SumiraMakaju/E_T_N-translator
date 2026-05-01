@@ -1,7 +1,4 @@
-
 //  EXTENSION CONTEXT GUARD 
-// Wraps every chrome.runtime call so stale content scripts (after extension
-// reload/update) fail silently instead of crashing the page.
 function isExtensionAlive() {
   try { return !!chrome.runtime?.id; } catch { return false; }
 }
@@ -10,10 +7,10 @@ function safeSendMessage(payload, cb) {
   if (!isExtensionAlive()) return;
   try {
     chrome.runtime.sendMessage(payload, (res) => {
-      if (chrome.runtime.lastError) { /* swallow */ return; }
+      if (chrome.runtime.lastError) { return; }
       cb && cb(res);
     });
-  } catch { /* context gone */ }
+  } catch { }
 }
 
 //  SHARED STATE 
@@ -24,7 +21,7 @@ let selectionTimeout  = null;
 let isPageTranslating = false;
 const translatedNodes = [];
 
-// HELPERS
+//  HELPERS 
 function detectLanguage(text) {
   return /[\u0900-\u097F]/.test(text) ? "ne" : "en";
 }
@@ -36,7 +33,10 @@ function escapeHtml(str) {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-//  TOAST
+// GMAIL DETECTION 
+const IS_GMAIL = location.hostname === "mail.google.com";
+
+//  TOAST 
 let _toastEl = null, _toastTimer = null;
 function showToast(msg, duration = 2500) {
   if (!_toastEl) {
@@ -53,21 +53,17 @@ function showToast(msg, duration = 2500) {
     );
 }
 function hideToast() { _toastEl?.classList.remove("tmt-toast-visible"); }
+// 🔊 VOICE / PRONUNCIATION ENGINE
 
-// PRONUNCIATION ENGINE
-// Uses Web Speech API (built into Chrome) — no external service needed.
-// Three accent modes map to BCP-47 lang tags.
-
-// Accent definitions: label → { lang, voiceHint }
 const ACCENTS = {
-  "US English":      { lang: "en-US", voiceHint: ["US", "United States"] },
-  "UK English":      { lang: "en-GB", voiceHint: ["UK", "United Kingdom", "British"] },
-  "Nepali English":  { lang: "ne-NP", voiceHint: ["Nepali", "Nepal"] },
+  "US English":     { lang: "en-US", voiceHint: ["US", "United States"] },
+  "UK English":     { lang: "en-GB", voiceHint: ["UK", "United Kingdom", "British"] },
+  "Nepali English": { lang: "ne-NP", voiceHint: ["Nepali", "Nepal"] },
 };
 
-let _currentAccent  = "US English";
-let _speechSynth    = window.speechSynthesis;
-let _voiceCache     = null;
+let _currentAccent = "US English";
+let _speechSynth   = window.speechSynthesis;
+let _voiceCache    = null;
 
 function getVoices() {
   if (_voiceCache) return _voiceCache;
@@ -75,29 +71,22 @@ function getVoices() {
   return _voiceCache;
 }
 
-// Pick the best available voice for an accent config
 function pickVoice(accentKey) {
-  const cfg   = ACCENTS[accentKey];
+  const cfg    = ACCENTS[accentKey];
   const voices = getVoices();
   if (!voices.length) return null;
-
-  // 1. Exact lang match with hint keyword in name
   for (const hint of cfg.voiceHint) {
     const v = voices.find(
       v => v.lang.startsWith(cfg.lang.split("-")[0]) && v.name.includes(hint)
     );
     if (v) return v;
   }
-  // 2. Any voice matching the lang prefix
   const byLang = voices.find(v => v.lang === cfg.lang);
   if (byLang) return byLang;
-
-  // 3. Same language, any region (e.g. en-AU when en-GB not available)
   const langPrefix = cfg.lang.split("-")[0];
   return voices.find(v => v.lang.startsWith(langPrefix)) || null;
 }
 
-// Reload voice list after synth fires voiceschanged (async in Chrome)
 if (_speechSynth) {
   _speechSynth.addEventListener("voiceschanged", () => { _voiceCache = null; });
 }
@@ -106,43 +95,30 @@ let _activeSpeech = null;
 
 function speakText(text, accentKey = _currentAccent) {
   if (!_speechSynth) { showToast("🔇 Speech not supported in this browser."); return; }
-
-  _speechSynth.cancel(); // stop anything playing
-
+  _speechSynth.cancel();
   const utter = new SpeechSynthesisUtterance(text);
   const cfg   = ACCENTS[accentKey] || ACCENTS["US English"];
   const voice = pickVoice(accentKey);
-
   utter.lang  = cfg.lang;
   utter.rate  = 0.92;
   utter.pitch = 1.0;
   if (voice) utter.voice = voice;
-
   utter.onstart = () => { _activeSpeech = utter; };
   utter.onend   = () => { _activeSpeech = null;  };
   utter.onerror = (e) => {
     _activeSpeech = null;
     if (e.error !== "interrupted") showToast("🔇 Speech error: " + e.error, 2500);
   };
-
   _speechSynth.speak(utter);
   _activeSpeech = utter;
 }
 
-function stopSpeech() {
-  _speechSynth?.cancel();
-  _activeSpeech = null;
-}
+function stopSpeech() { _speechSynth?.cancel(); _activeSpeech = null; }
+function isSpeaking() { return _speechSynth?.speaking ?? false; }
 
-function isSpeaking() {
-  return _speechSynth?.speaking ?? false;
-}
-
-// Build the accent-selector pill row
 function buildAccentSelector(onChange) {
   const row = document.createElement("div");
   row.className = "tmt-accent-row";
-
   Object.keys(ACCENTS).forEach(label => {
     const btn = document.createElement("button");
     btn.className = "tmt-accent-btn" + (label === _currentAccent ? " active" : "");
@@ -156,64 +132,53 @@ function buildAccentSelector(onChange) {
     };
     row.appendChild(btn);
   });
-
   return row;
 }
 
-// The 🔊 button that lives inside the tooltip output area
-function buildSpeakButton(getText, accentKey) {
+function buildSpeakButton(getText) {
   const btn = document.createElement("button");
-  btn.className  = "tmt-speak-btn";
-  btn.title      = "Hear pronunciation";
-  btn.innerHTML  = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-    <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-  </svg> Speak`;
-
+  btn.className = "tmt-speak-btn";
+  btn.title     = "Hear pronunciation";
+  btn.innerHTML = speakerSVG() + " Speak";
   let playing = false;
-
   btn.onclick = () => {
     if (playing) {
-      stopSpeech();
-      playing = false;
-      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg> Speak`;
+      stopSpeech(); playing = false;
+      btn.innerHTML = speakerSVG() + " Speak";
       btn.classList.remove("tmt-speak-active");
       return;
     }
-
     const text = getText();
     if (!text) return;
-
     playing = true;
-    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-      <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>
-      <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>
-    </svg> Stop`;
+    btn.innerHTML = pauseSVG() + " Stop";
     btn.classList.add("tmt-speak-active");
-
     speakText(text, _currentAccent);
-
-    // Poll for completion
     const poll = setInterval(() => {
       if (!isSpeaking()) {
-        clearInterval(poll);
-        playing = false;
-        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-          <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg> Speak`;
+        clearInterval(poll); playing = false;
+        btn.innerHTML = speakerSVG() + " Speak";
         btn.classList.remove("tmt-speak-active");
       }
     }, 300);
   };
-
   return btn;
 }
 
-// PAGE ENGINE
+function speakerSVG() {
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>`;
+}
+function pauseSVG() {
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+    <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+    <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+  </svg>`;
+}
+
+// PAGE ENGINE — with Gmail-aware root selection
 
 const SKIP_TAGS = new Set([
   "SCRIPT","STYLE","NOSCRIPT","CODE","PRE","KBD","SAMP","VAR",
@@ -221,22 +186,49 @@ const SKIP_TAGS = new Set([
   "HEAD","META","LINK","TEMPLATE","SLOT","TMT-INLINE",
 ]);
 const SKIP_ROLES   = new Set(["navigation","banner","contentinfo","search","complementary"]);
-const SKIP_CLASSES = /\b(nav|navbar|sidebar|footer|header|breadcrumb|menu|ad|ads|cookie|captcha|code|hljs)\b/i;
-const SKIP_IDS     = /\b(nav|sidebar|footer|header|menu|cookie|ad)\b/i;
+
+// Gmail uses obfuscated class names, so broad class-based skipping kills
+// most of the page. We limit class/id skipping to clearly non-content nodes.
+const SKIP_CLASSES = IS_GMAIL
+  ? /\b(ad|ads|cookie|captcha|code|hljs)\b/i           // minimal for Gmail
+  : /\b(nav|navbar|sidebar|footer|header|breadcrumb|menu|ad|ads|cookie|captcha|code|hljs)\b/i;
+
+const SKIP_IDS = IS_GMAIL
+  ? /\b(cookie|ad)\b/i                                  // minimal for Gmail
+  : /\b(nav|sidebar|footer|header|menu|cookie|ad)\b/i;
 
 function shouldSkipNode(el) {
   if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
-  if (SKIP_TAGS.has(el.tagName))                        return true;
-  if (el.getAttribute("translate") === "no")            return true;
-  if (el.getAttribute("contenteditable") === "true")    return true;
-  if (SKIP_ROLES.has(el.getAttribute("role")))          return true;
-  if (el.className && typeof el.className === "string" && SKIP_CLASSES.test(el.className)) return true;
-  if (el.id && SKIP_IDS.test(el.id))                   return true;
+  if (SKIP_TAGS.has(el.tagName))                                    return true;
+  if (el.getAttribute("translate") === "no")                        return true;
+  if (el.getAttribute("contenteditable") === "true")                return true;
+  if (SKIP_ROLES.has(el.getAttribute("role")))                      return true;
+  if (el.className && typeof el.className === "string"
+      && SKIP_CLASSES.test(el.className))                           return true;
+  if (el.id && SKIP_IDS.test(el.id))                               return true;
   return false;
 }
 
+// Instead of walking all of document.body (which includes the entire Gmail
+// chrome), we target only opened message bodies and the inbox list.
+function getTranslationRoot() {
+  if (!IS_GMAIL) return document.body;
+
+  // Open email reading pane — Gmail's message body lives here
+  const msgBody = document.querySelector(
+    ".a3s.aiL, .gs .ii.gt, [data-message-id] .a3s"
+  );
+  if (msgBody) return msgBody;
+
+  // Inbox/list view — subject lines and snippet text
+  const inbox = document.querySelector(".AO, .BltHke");
+  if (inbox) return inbox;
+
+  return document.body;
+}
+
 function collectTextNodes(root) {
-  const nodes = [];
+  const nodes  = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const txt = node.textContent.trim();
@@ -269,7 +261,6 @@ function batchNodes(nodes) {
   return batches;
 }
 
-// All API calls routed through background (avoids page CSP)
 function callTranslateAPI(text, src_lang, tgt_lang) {
   return new Promise((resolve, reject) => {
     if (!isExtensionAlive()) { reject(new Error("Extension context invalidated")); return; }
@@ -292,7 +283,9 @@ async function translatePage(tgt_lang, apiKey) {
   _cancelRequested = false;
   _pageNodes.length = 0;
 
-  const sample   = document.body.innerText.slice(0, 200);
+  const root = getTranslationRoot();
+
+  const sample   = root.innerText?.slice(0, 200) || "";
   const src_lang = detectLanguage(sample);
 
   if (src_lang === tgt_lang) {
@@ -300,7 +293,7 @@ async function translatePage(tgt_lang, apiKey) {
     return;
   }
 
-  const nodes = collectTextNodes(document.body);
+  const nodes = collectTextNodes(root);
   if (!nodes.length) {
     _progressCb?.({ status: "error", message: "No translatable text found." });
     return;
@@ -328,12 +321,17 @@ async function translatePage(tgt_lang, apiKey) {
           continue;
         }
 
-        const wrapper = document.createElement("tmt-inline");
+  
+        // A plain <span> with a data attribute survives intact.
+        const wrapper = IS_GMAIL
+          ? document.createElement("span")
+          : document.createElement("tmt-inline");
+
         wrapper.setAttribute("data-original",   originalText);
         wrapper.setAttribute("data-translated", translated);
         wrapper.setAttribute("data-src",        src_lang);
         wrapper.setAttribute("data-tgt",        tgt_lang);
-        wrapper.setAttribute("data-page",       "true");
+        wrapper.setAttribute("data-tmt-page",   "true");   // renamed to avoid Gmail stripping
         wrapper.className = "tmt-translated tmt-page-translated";
         wrapper.title     = `Original: ${originalText.slice(0, 80)}`;
         wrapper.textContent = translated;
@@ -351,7 +349,6 @@ async function translatePage(tgt_lang, apiKey) {
           _progressCb?.({ status: "cancelled", done, total });
           return;
         }
-        // Skip individual node failures silently
       }
 
       done++;
@@ -364,11 +361,44 @@ async function translatePage(tgt_lang, apiKey) {
 }
 
 function restorePageTranslation() {
-  const all = document.querySelectorAll("tmt-inline[data-page]");
+
+  const all = document.querySelectorAll(
+    "tmt-inline[data-tmt-page], span[data-tmt-page], tmt-inline[data-page]"
+  );
   all.forEach(w => w.replaceWith(document.createTextNode(w.getAttribute("data-original"))));
   _pageNodes.length = 0;
   return all.length;
 }
+
+
+let _gmailObserver = null;
+let _lastGmailMsgId = null;
+
+function startGmailObserver() {
+  if (!IS_GMAIL || _gmailObserver) return;
+
+  _gmailObserver = new MutationObserver(() => {
+    // Detect when a new message body appears
+    const msgEl = document.querySelector("[data-message-id]");
+    const msgId = msgEl?.getAttribute("data-message-id");
+
+    if (msgId && msgId !== _lastGmailMsgId) {
+      _lastGmailMsgId = msgId;
+      // Show a toast nudge so user knows they can translate the new email
+      if (pagePanel?.classList.contains("tmt-pp-visible")) {
+        showToast("📧 New email opened — press Translate Page to translate it.", 3500);
+        // Reset panel back to setup view so user can retranslate
+        restorePageTranslation();
+        switchView("setup");
+      }
+    }
+  });
+
+  _gmailObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+// Start observer immediately on Gmail
+startGmailObserver();
 
 // INLINE TRANSLATION (selection replace)
 
@@ -403,11 +433,16 @@ async function translateInline(selection, tgt_lang) {
     sel2.addRange(savedRange);
     const range = sel2.getRangeAt(0);
 
-    const wrapper = document.createElement("tmt-inline");
+    // Use <span> on Gmail, <tmt-inline> elsewhere
+    const wrapper = IS_GMAIL
+      ? document.createElement("span")
+      : document.createElement("tmt-inline");
+
     wrapper.setAttribute("data-original",   selectedText);
     wrapper.setAttribute("data-translated", response.output);
     wrapper.setAttribute("data-src",        src_lang);
     wrapper.setAttribute("data-tgt",        tgt_lang);
+    wrapper.setAttribute("data-tmt-inline", "true");
     wrapper.className = "tmt-translated";
     wrapper.title     = `Original: ${selectedText} | Alt+Z to restore`;
     wrapper.textContent = response.output;
@@ -433,15 +468,18 @@ function deTranslateLast() {
 }
 
 function deTranslateAll() {
-  const all = document.querySelectorAll("tmt-inline:not([data-page])");
+
+  const all = document.querySelectorAll(
+    "tmt-inline[data-tmt-inline], span[data-tmt-inline]"
+  );
   if (!all.length) { showToast("No inline translations to restore."); return; }
   all.forEach(w => w.replaceWith(document.createTextNode(w.getAttribute("data-original"))));
   translatedNodes.length = 0;
   showToast(`↩ Restored ${all.length} translation${all.length !== 1 ? "s" : ""}`);
 }
 
+// TOOLTIP — with 🔊 voice playback (unchanged from v3)
 
-// TOOLTIP — with voice playbac
 
 function createTooltip() {
   const el = document.createElement("div");
@@ -475,7 +513,6 @@ function createTooltip() {
       </div>
     </div>
 
-    <!-- Source text + speak original -->
     <div class="tmt-source-wrap">
       <div id="tmt-source-text" class="tmt-source"></div>
       <button id="tmt-speak-src" class="tmt-speak-icon" title="Hear original">
@@ -488,17 +525,12 @@ function createTooltip() {
 
     <div id="tmt-output" class="tmt-output"><div class="tmt-spinner"></div></div>
 
-    <!-- Accent selector (shown after translation) -->
     <div id="tmt-accent-wrap" class="tmt-accent-wrap" style="display:none"></div>
 
     <div class="tmt-actions">
       <div class="tmt-action-left">
         <button id="tmt-speak-out" class="tmt-btn-speak" style="display:none">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-            <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          🔊 Speak
+          ${speakerSVG()} 🔊 Speak
         </button>
         <button id="tmt-replace" class="tmt-btn-replace" style="display:none">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
@@ -531,17 +563,17 @@ function showTooltipEl(x, y, text, savedRange) {
   _savedRangeForTooltip = savedRange || null;
   _currentSourceText    = text;
 
-  const srcSel    = tooltip.querySelector("#tmt-src");
-  const tgtSel    = tooltip.querySelector("#tmt-tgt");
-  const srcEl     = tooltip.querySelector("#tmt-source-text");
-  const outEl     = tooltip.querySelector("#tmt-output");
-  const copyBtn   = tooltip.querySelector("#tmt-copy");
-  const repBtn    = tooltip.querySelector("#tmt-replace");
-  const speakOut  = tooltip.querySelector("#tmt-speak-out");
-  const speakSrc  = tooltip.querySelector("#tmt-speak-src");
-  const accentWrap= tooltip.querySelector("#tmt-accent-wrap");
-  const closeBtn  = tooltip.querySelector("#tmt-close");
-  const swapBtn   = tooltip.querySelector("#tmt-swap");
+  const srcSel     = tooltip.querySelector("#tmt-src");
+  const tgtSel     = tooltip.querySelector("#tmt-tgt");
+  const srcEl      = tooltip.querySelector("#tmt-source-text");
+  const outEl      = tooltip.querySelector("#tmt-output");
+  const copyBtn    = tooltip.querySelector("#tmt-copy");
+  const repBtn     = tooltip.querySelector("#tmt-replace");
+  const speakOut   = tooltip.querySelector("#tmt-speak-out");
+  const speakSrc   = tooltip.querySelector("#tmt-speak-src");
+  const accentWrap = tooltip.querySelector("#tmt-accent-wrap");
+  const closeBtn   = tooltip.querySelector("#tmt-close");
+  const swapBtn    = tooltip.querySelector("#tmt-swap");
 
   const detected = detectLanguage(text);
   srcSel.value = detected;
@@ -550,13 +582,12 @@ function showTooltipEl(x, y, text, savedRange) {
 
   srcEl.textContent = text.length > 120 ? text.slice(0, 120) + "…" : text;
   outEl.innerHTML   = '<div class="tmt-spinner"></div>';
-  copyBtn.style.display  = "none";
-  repBtn.style.display   = "none";
-  speakOut.style.display = "none";
+  copyBtn.style.display    = "none";
+  repBtn.style.display     = "none";
+  speakOut.style.display   = "none";
   accentWrap.style.display = "none";
-  accentWrap.innerHTML   = "";
+  accentWrap.innerHTML     = "";
 
-  // Speak original button
   speakSrc.onclick = () => speakText(text, _currentAccent);
 
   tooltip.style.display = "block";
@@ -577,12 +608,12 @@ function showTooltipEl(x, y, text, savedRange) {
   const retranslate = () => {
     if (srcSel.value === tgtSel.value) tgtSel.value = srcSel.value === "en" ? "ne" : "en";
     _tgtLangForReplace = tgtSel.value;
-    outEl.innerHTML = '<div class="tmt-spinner"></div>';
-    copyBtn.style.display  = "none";
-    repBtn.style.display   = "none";
-    speakOut.style.display = "none";
+    outEl.innerHTML          = '<div class="tmt-spinner"></div>';
+    copyBtn.style.display    = "none";
+    repBtn.style.display     = "none";
+    speakOut.style.display   = "none";
     accentWrap.style.display = "none";
-    accentWrap.innerHTML   = "";
+    accentWrap.innerHTML     = "";
     runTooltipTranslate(text, srcSel.value, tgtSel.value);
   };
 
@@ -618,31 +649,21 @@ function showTooltipEl(x, y, text, savedRange) {
     await translateInline(window.getSelection(), _tgtLangForReplace);
   };
 
-  // 🔊 Speak translated output
   speakOut.onclick = () => {
     const r = outEl.querySelector(".tmt-result");
     if (!r) return;
     if (isSpeaking()) {
       stopSpeech();
-      speakOut.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg> 🔊 Speak`;
+      speakOut.innerHTML = speakerSVG() + " 🔊 Speak";
       speakOut.classList.remove("tmt-speak-active");
     } else {
       speakText(r.textContent, _currentAccent);
-      speakOut.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-        <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>
-        <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>
-      </svg> Stop`;
+      speakOut.innerHTML = pauseSVG() + " Stop";
       speakOut.classList.add("tmt-speak-active");
       const poll = setInterval(() => {
         if (!isSpeaking()) {
           clearInterval(poll);
-          speakOut.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-            <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg> 🔊 Speak`;
+          speakOut.innerHTML = speakerSVG() + " 🔊 Speak";
           speakOut.classList.remove("tmt-speak-active");
         }
       }, 300);
@@ -651,21 +672,19 @@ function showTooltipEl(x, y, text, savedRange) {
 }
 
 function runTooltipTranslate(text, src_lang, tgt_lang) {
-  const outEl    = tooltip?.querySelector("#tmt-output");
-  const copyBtn  = tooltip?.querySelector("#tmt-copy");
-  const repBtn   = tooltip?.querySelector("#tmt-replace");
-  const speakOut = tooltip?.querySelector("#tmt-speak-out");
+  const outEl      = tooltip?.querySelector("#tmt-output");
+  const copyBtn    = tooltip?.querySelector("#tmt-copy");
+  const repBtn     = tooltip?.querySelector("#tmt-replace");
+  const speakOut   = tooltip?.querySelector("#tmt-speak-out");
   const accentWrap = tooltip?.querySelector("#tmt-accent-wrap");
 
   safeSendMessage({ type: "TRANSLATE", text, src_lang, tgt_lang }, (res) => {
     if (!outEl) return;
     if (res?.success) {
       outEl.innerHTML = `<div class="tmt-result">${escapeHtml(res.output)}</div>`;
-      if (copyBtn) copyBtn.style.display  = "flex";
-      if (repBtn)  repBtn.style.display   = "flex";
+      if (copyBtn)  copyBtn.style.display  = "flex";
+      if (repBtn)   repBtn.style.display   = "flex";
       if (speakOut) speakOut.style.display = "flex";
-
-      // Build accent selector below output
       if (accentWrap) {
         accentWrap.innerHTML = "";
         accentWrap.appendChild(buildAccentSelector(null));
@@ -691,7 +710,6 @@ function hideTooltipEl() {
 }
 
 // LANGUAGE PICKER (Alt+T)
-
 function createLangPicker() {
   const el = document.createElement("div");
   el.id = "tmt-lang-picker";
@@ -789,14 +807,15 @@ function createPagePanel() {
           <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        Smart Page Translate
+        Smart Page Translate${IS_GMAIL ? " · Gmail Mode" : ""}
       </div>
       <button class="tmt-pp-close" id="tmt-pp-close">✕</button>
     </div>
     <div class="tmt-pp-body">
       <div id="tmt-pp-setup" style="display:flex;flex-direction:column;gap:14px">
+        ${IS_GMAIL ? `<div class="tmt-pp-gmail-hint">📧 Opens the current email for translation. Open an email first, then click Translate.</div>` : ""}
         <div class="tmt-pp-lang-group">
-          <span class="tmt-pp-lang-label">Translate page to</span>
+          <span class="tmt-pp-lang-label">Translate to</span>
           <div class="tmt-pp-lang-btns">
             <button class="tmt-pp-lang-btn active" data-lang="ne">🇳🇵 Nepali</button>
             <button class="tmt-pp-lang-btn" data-lang="en">🇬🇧 English</button>
@@ -812,7 +831,7 @@ function createPagePanel() {
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
             <path d="M5 3l14 9-14 9V3z" fill="currentColor"/>
           </svg>
-          Translate Page
+          Translate${IS_GMAIL ? " Email" : " Page"}
         </button>
       </div>
 
@@ -833,7 +852,7 @@ function createPagePanel() {
         <div class="tmt-pp-done-row">
           <div class="tmt-pp-done-icon">✓</div>
           <div>
-            <div class="tmt-pp-done-title" id="tmt-pp-done-title">Page translated</div>
+            <div class="tmt-pp-done-title" id="tmt-pp-done-title">Translated</div>
             <div class="tmt-pp-done-sub" id="tmt-pp-done-sub"></div>
           </div>
         </div>
@@ -876,8 +895,8 @@ function createPagePanel() {
     setTimeout(() => { el.style.display = "none"; }, 220);
   };
 
-  document.getElementById("tmt-pp-go").onclick     = () => startPageTranslate(selectedLang);
-  document.getElementById("tmt-pp-cancel").onclick  = () => {
+  document.getElementById("tmt-pp-go").onclick    = () => startPageTranslate(selectedLang);
+  document.getElementById("tmt-pp-cancel").onclick = () => {
     cancelPageTranslation(); isPageTranslating = false;
     switchView("setup"); showToast("Translation cancelled.");
   };
@@ -886,7 +905,9 @@ function createPagePanel() {
     switchView("setup");
     showToast(`↩ Restored ${n} element${n !== 1 ? "s" : ""}`);
   };
-  document.getElementById("tmt-pp-again").onclick   = () => { restorePageTranslation(); switchView("setup"); };
+  document.getElementById("tmt-pp-again").onclick = () => {
+    restorePageTranslation(); switchView("setup");
+  };
 
   return el;
 }
@@ -908,6 +929,12 @@ function showPagePanel() {
 
 async function startPageTranslate(tgt_lang) {
   if (isPageTranslating) return;
+
+
+  if (IS_GMAIL && !document.querySelector(".a3s.aiL, .gs .ii.gt, [data-message-id] .a3s")) {
+    showToast("📧 Please open an email first, then click Translate Email.", 4000);
+    return;
+  }
 
   const result = await new Promise(r => chrome.storage.sync.get("apiKey", r));
   const apiKey = result.apiKey;
@@ -937,14 +964,14 @@ async function startPageTranslate(tgt_lang) {
       switchView("done");
       const t = document.getElementById("tmt-pp-done-title");
       const s = document.getElementById("tmt-pp-done-sub");
-      if (t) t.textContent = `✓ Page translated to ${langName(tgt_lang)}`;
+      if (t) t.textContent = `✓ Translated to ${langName(tgt_lang)}`;
       if (s) s.textContent = `${done} text blocks · code & names preserved`;
     } else if (status === "cancelled") {
       isPageTranslating = false;
     } else if (status === "error") {
       isPageTranslating = false;
       switchView("setup");
-      showToast("⚠ " + (message || "Page translation failed"), 4000);
+      showToast("⚠ " + (message || "Translation failed"), 4000);
     }
   });
 
@@ -1010,7 +1037,10 @@ document.addEventListener("mousedown", (e) => {
     hideLangPicker();
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
 // MESSAGES FROM BACKGROUND
+// ═══════════════════════════════════════════════════════════════════════════
+
 chrome.runtime.onMessage.addListener((msg) => {
   if (!isExtensionAlive()) return;
 
