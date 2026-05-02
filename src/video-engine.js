@@ -1,6 +1,7 @@
 const TMT_SUBTITLE_ID = "tmt-subtitle-overlay";
 const TMT_PANEL_ID = "tmt-video-panel";
 const CHUNK_MS = 6000;
+let manuallyClosed = false;
 
 function isAlive() {
   try {
@@ -403,12 +404,11 @@ function createPanel() {
       <img src="${iconUrl}" alt="icon" width="35" height="35" />
         Video Translate
        </div>
-       </div>
-      <div class="tmt-vp-header-right">
-        <button class="tmt-vp-min" id="tmt-vp-min" title="Minimise">—</button>
-        <button class="tmt-vp-close" id="tmt-vp-close" title="Close">×</button>
-      </div>
-    </div>
+       <div class="tmt-vp-header-right">
+    <button id="tmt-vp-min">—</button>
+    <button id="tmt-vp-close">×</button>
+  </div>
+</div>   
 
     <div class="tmt-vp-body" id="tmt-vp-body">
 
@@ -557,6 +557,7 @@ function makeDraggable(el) {
     document.addEventListener("mouseup", up);
   };
 }
+// add this with other let variables at top
 
 function stopTranslation() {
   isTranslating = false;
@@ -571,6 +572,7 @@ function stopTranslation() {
 }
 
 function stopAll() {
+  manuallyClosed = true;
   stopTranslation();
   removeSubtitleEl();
   panelEl?.remove();
@@ -601,6 +603,7 @@ function attachToVideo(video) {
 chrome.runtime.onMessage.addListener((msg) => {
   if (!isAlive()) return;
   if (msg.type === "OPEN_VIDEO_PANEL") {
+    manuallyClosed = false;
     const video = findMainVideo();
     if (!video) {
       const t = document.createElement("div");
@@ -630,10 +633,21 @@ document.addEventListener("keydown", (e) => {
 });
 
 function tryAutoAttach() {
+  if (manuallyClosed) return;
   if (panelEl && document.contains(panelEl)) return;
   const v = findMainVideo();
   if (v) attachToVideo(v);
 }
+
+document.addEventListener("keydown", (e) => {
+  if (!isAlive()) return;
+  if (e.altKey && !e.shiftKey && e.key.toLowerCase() === "v") {
+    e.preventDefault();
+    manuallyClosed = false; // ← add this
+    const video = findMainVideo();
+    if (video) attachToVideo(video);
+  }
+});
 
 const videoObserver = new MutationObserver(() => {
   if (!panelEl || !document.contains(panelEl)) tryAutoAttach();
@@ -645,6 +659,7 @@ const hrefObserver = new MutationObserver(() => {
   if (location.href !== lastHref) {
     lastHref = location.href;
     if (panelEl) stopAll();
+    manuallyClosed = false;
     setTimeout(tryAutoAttach, 1500);
   }
 });
