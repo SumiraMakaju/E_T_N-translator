@@ -204,3 +204,5 @@ paastrans/
 | `tabCapture` | Capture tab audio for Whisper-based video translation |
 
 ---
+### demo video link
+[DEMO CLICK HERE](https://drive.google.com/drive/folders/1RT4J5BgMJm1w6lg5P7GMuuSwlHXFmN-h?usp=sharing)
