@@ -53,7 +53,7 @@ function showToast(msg, duration = 2500) {
     );
 }
 function hideToast() { _toastEl?.classList.remove("tmt-toast-visible"); }
-// 🔊 VOICE / PRONUNCIATION ENGINE
+//  VOICE / PRONUNCIATION ENGINE
 
 const ACCENTS = {
   "US English":     { lang: "en-US", voiceHint: ["US", "United States"] },
@@ -681,7 +681,7 @@ function showTooltipEl(x, y, text, savedRange) {
     if (!r) return;
     if (isSpeaking()) {
       stopSpeech();
-      speakOut.innerHTML = speakerSVG() + " 🔊 Speak";
+      speakOut.innerHTML = speakerSVG() + "  Speak";
       speakOut.classList.remove("tmt-speak-active");
     } else {
       speakText(r.textContent, _currentAccent);
@@ -690,7 +690,7 @@ function showTooltipEl(x, y, text, savedRange) {
       const poll = setInterval(() => {
         if (!isSpeaking()) {
           clearInterval(poll);
-          speakOut.innerHTML = speakerSVG() + " 🔊 Speak";
+          speakOut.innerHTML = speakerSVG() + " Speak";
           speakOut.classList.remove("tmt-speak-active");
         }
       }, 300);
@@ -850,7 +850,7 @@ function createPagePanel() {
         <div class="tmt-pp-features">
           <div class="tmt-pp-feature"><span class="tmt-pp-feature-dot tmt-dot-skip"></span>Skips code, scripts, nav, footer</div>
           <div class="tmt-pp-feature"><span class="tmt-pp-feature-dot tmt-dot-keep"></span>Preserves emails, URLs, brand names</div>
-          <div class="tmt-pp-feature"><span class="tmt-pp-feature-dot tmt-dot-smart"></span>🔊 Voice playback on translated text</div>
+          <div class="tmt-pp-feature"><span class="tmt-pp-feature-dot tmt-dot-smart"></span> Voice playback on translated text</div>
         </div>
         <button class="tmt-pp-go" id="tmt-pp-go">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
@@ -957,7 +957,7 @@ async function startPageTranslate(tgt_lang) {
 
 
   if (IS_GMAIL && !document.querySelector(".a3s.aiL, .gs .ii.gt, [data-message-id] .a3s")) {
-    showToast("📧 Please open an email first, then click Translate Email.", 4000);
+    showToast(" Please open an email first, then click Translate Email.", 4000);
     return;
   }
 

@@ -427,12 +427,7 @@ function createPanel() {
           <option value="auto">Auto-detect</option>
           <option value="en">English</option>
           <option value="ne">Nepali</option>
-          <option value="zh">Chinese</option>
-          <option value="ja">Japanese</option>
-          <option value="ko">Korean</option>
-          <option value="hi">Hindi</option>
-          <option value="ar">Arabic</option>
-          <option value="ru">Russian</option>
+          <option value="tmg">Tamang</option>
         </select>
       </div>
 
