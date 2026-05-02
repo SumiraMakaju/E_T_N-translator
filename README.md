@@ -1,37 +1,206 @@
-# TMT Translator Extension 🌍
+# TMT Translator
 
-A powerful, smart, and comprehensive browser extension for real-time translation between **English, Nepali, and Tamang**. Designed for seamless reading, email communication, and video watching, this extension leverages the TMT Translation Engine and OpenAI Whisper for an unparalleled multilingual experience.
+**A trilingual browser extension for real-time translation between English, Nepali, and Tamang.**
 
-## ✨ Features
+TMT Translator bridges the language gap for Nepali and Tamang speakers by integrating the TMT Translation Engine with to deliver smart, context-aware translation across web pages, selected text, and videos across web browser.
 
-### 1. 🎬 Live Video Translation (Smart Captioning)
+---
 
-### 2. 📄 Smart Page Translation
-Translate entire web pages into your target language without breaking the page's layout.
-*   **Context Protection:** Automatically skips and protects code blocks, emails, URLs, API keys, and over 50 brand names (like "Google" or "Facebook") from being corrupted by translation.
-*   **Gmail Mode:** Specifically detects when you are reading an email on Gmail and translates only the email body, rather than translating the entire Gmail user interface.
+## Table of Contents
 
-### 3. 📝 Inline Selection Translation
-Translate specific paragraphs or sentences without leaving the page.
-*   Highlight any text to reveal a floating translation tooltip.
-*   **Undo/Restore:** Replaces the text on the page with the translation. If you select multiple paragraphs, the exact HTML structure (like line breaks and paragraph tags) is perfectly preserved. Press `Alt+Z` to seamlessly restore the original text.
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Project Structure](#project-structure)
+- [Tech Stack](#tech-stack)
 
-### 4. 🔊 Intelligent Text-to-Speech (Speak)
-Listen to the translated text with a single click.
-*   Automatically detects the script being used.
-*   If Devanagari script (Nepali/Tamang) is detected, the extension will automatically search your operating system for a compatible Nepali (`ne-NP`) or Hindi (`hi-IN`) voice pack to ensure the text is spoken correctly, rather than failing silently with an English voice.
+---
 
-## ⌨️ Keyboard Shortcuts
+## Overview
+
+TMT Translator is a Manifest V3 Chrome extension that brings trilingual translation (English, Nepali, Tamang) directly into the browser. It is designed for three primary use cases: reading web pages, reading emails in Gmail, and watching videos all without disrupting the user's workflow. It then translates as per user requirements.
+
+The extension is powered by the TMT Translation API hosted at Kathmandu University's ILPRL lab (`tmt.ilprl.ku.edu.np`).
+---
+
+## Features
+
+### Smart Page Translation
+
+Translates the full visible content of any web page into the target language while preserving layout and structure.
+
+- **Context Protection:** A regex-based guard automatically detects and skips code blocks, inline code, URLs, email addresses, hex color values, version strings, filenames, and over 50 brand names (Google, GitHub, React, etc.) to prevent them from being corrupted by translation.
+- **Gmail Mode:** Detects when the active tab is Gmail (`mail.google.com`) and restricts translation to the email body only, leaving the Gmail UI intact.
+
+### Inline Selection Translation
+
+Translates a specific passage without navigating away from the page.
+
+steps:
+
+1. Highlight any text to reveal a floating translation tooltip with a language picker.
+2. The selected text is replaced inplace on the page with the translated version, preserving the original HTML structure (paragraph tags, line breaks, etc.).
+3.  Press `Alt+Z` to restore the last translated segment, or `Alt+Shift+Z` to restore all translated segments on the page.
+
+### Live Video Translation
+
+A dedicated video engine tracks HTML5 video players across any website and delivers translated subtitles as an overlay.
+
+It observes existing on-screen captions (YouTube, Twitch, Vimeo, and others) via a `MutationObserver` and translates each caption segment as it appears, and in Whisper Mode Captures the tab's audio stream, chunks it into 6-second segments, sends each chunk to OpenAI Whisper for transcription, and then translates the transcript. Used when no native captions are present.
+
+### Intelligent Text-to-Speech
+
+Any translated text can be read aloud with a single click.
+
+It automatically detects whether the output is in Devanagari script (Nepali/Tamang) or Latin script (English). For Devanagari output, the engine searches the operating system's installed voice packs for a compatible `ne-NP` or `hi-IN` voice before falling back to a default.
+
+---
+
+## Architecture
+
+The extension is composed of four primary source modules:
+
+| File | Responsibility |
+|------|---------------|
+| `src/background.js` | Service worker. Manages all API communication with the TMT engine and OpenAI Whisper, handles context menu registration, stores translation history in `chrome.storage`, and runs the regex-based text protection pipeline. |
+| `src/content.js` | Content script injected into every page. Handles DOM manipulation, the floating tooltip UI, inline text replacement, Smart Page Translation traversal, Text-to-Speech, and all keyboard shortcut listeners. |
+| `src/video-engine.js` | Content script dedicated to video translation. Detects active HTML5 video elements, manages the subtitle overlay DOM node, coordinates the DOM caption observer and Whisper audio capture modes, and positions the subtitle relative to the video. |
+| `src/options.js` | Options page script. Provides the settings UI for API keys, default language preferences, and caption style. |
+| `build.js` | esbuild configuration. Bundles all source modules and copies static assets into the `dist/` folder. |
+
+**Message-passing flow:**
+
+```
+content.js / video-engine.js
+        |
+        |  chrome.runtime.sendMessage
+        v
+  background.js  <-->  TMT API / OpenAI Whisper API
+        |
+        |  response callback
+        v
+content.js / video-engine.js  (renders result to DOM)
+```
+
+---
+
+## Installation
+
+### From Source (Developer Mode)
+
+**Prerequisites:** Node.js 18+ and npm.
+
+1. Clone or extract the repository:
+   ```bash
+   git clone https://github.com/SumiraMakaju/TMT-translator.git
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Create a `.env` file in the project root (see [Configuration](#configuration)).
+
+4. Build the extension:
+   ```bash
+   npm run build
+   //or node build.js
+   ```
+   The compiled extension is written to the `dist/` folder.
+
+5. Load in Chrome:
+   - Navigate to `chrome://extensions`
+   - Enable **Developer mode** (top-right toggle)
+   - Click **Load unpacked** and select the `dist/` folder
+
+---
+
+## Configuration
+
+Create a `.env` file in the project root with the following keys:
+
+```env
+TMT_API_URL=https://tmt.ilprl.ku.edu.np/lang-translate
+TMT_API_KEY=tmt api key
+OPENAI_API_KEY=openai api
+```
+
+| Variable | Description |
+|----------|-------------|
+| `TMT_API_URL` | Endpoint for the TMT Translation Engine (ILPRL, Kathmandu University) |
+| `TMT_API_KEY` | API key for the TMT Translation Engine |
+| `OPENAI_API_KEY` | OpenAI API key used for Whisper audio transcription in video mode |
+
+These values are injected at build time by esbuild and are not exposed in the browser at runtime.
+
+
+---
+
+## Keyboard Shortcuts
+
 | Shortcut | Action |
-| :--- | :--- |
-| `Alt + P` | Open Smart Page Translate Panel |
-| `Alt + T` | Translate selected text inline |
-| `Alt + Z` | Undo/Restore the last inline translation |
-| `Alt + Shift + Z` | Undo/Restore *all* inline translations |
-| `Alt + V` | Open Video Translate Panel (if a video is present) |
+|----------|--------|
+| `Alt + T` | Open the language picker for the current text selection |
+| `Alt + P` | Open the Smart Page Translate panel |
+| `Alt + V` | Open the Video Translate panel (requires a video on the page) |
+| `Alt + Z` | Undo / restore the last inline translation |
+| `Alt + Shift + Z` | Undo / restore all inline translations on the page |
 
-## 🏗 Architecture
-*   **`src/background.js`:** Manages API requests, API keys, regex protection logic, history, and Whisper chunking.
-*   **`src/content.js`:** Handles DOM manipulation, inline tooltip rendering, Smart Page Translation logic, Text-to-Speech generation, and keyboard listeners.
-*   **`src/video-engine.js`:** A dedicated engine for tracking HTML5 video, observing DOM subtitle mutations, and capturing tab audio streams.
-*   **`build.js`:** The esbuild configuration that bundles the source code and CSS into the `dist/` folder for browser consumption.
+
+---
+
+## Project Structure
+
+```
+paastrans/
+├── src/
+│   ├── background.js       # Service worker: API, storage, context menus
+│   ├── content.js          # Content script: DOM translation, tooltip, TTS
+│   ├── video-engine.js     # Content script: video subtitle overlay
+│   ├── options.js          # Options page logic
+│   └── page-engine.js      # Page traversal helpers
+├── public/
+│   ├── manifest.json       # Extension manifest (MV3)
+│   ├── popup.html          # Browser action popup
+│   ├── options.html        # Settings page
+│   ├── popup.css
+│   ├── options.css
+│   ├── content.css
+│   ├── video-engine.css
+│   └── icons/              
+├── dist/                   # Compiled output (generated by build)
+├── build.js                # esbuild bundler configuration
+├── package.json
+└── .env                    # API keys
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Extension platform | Chrome Extensions Manifest V3 |
+| Translation engine | TMT API: Kathmandu University |
+| Audio transcription | OpenAI Whisper (`whisper-1`) |
+| Bundler | esbuild |
+| Runtime dependencies | None (vanilla JS, Web APIs only) |
+
+---
+
+## Permissions
+
+| Permission | Reason |
+|------------|--------|
+| `activeTab` | Access the current tab to inject content scripts on demand |
+| `scripting` | Inject content scripts and CSS into tabs |
+| `storage` | Persist user preferences and translation history |
+| `contextMenus` | Add right-click "Translate with TMT" menu items |
+| `tabs` | Query the active tab for keyboard command routing |
+| `tabCapture` | Capture tab audio for Whisper-based video translation |
+
+---

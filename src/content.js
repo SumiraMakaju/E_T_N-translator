@@ -1017,7 +1017,7 @@ document.addEventListener("keydown", (e) => {
   if (e.altKey && !e.shiftKey && e.key.toLowerCase() === "t") {
     e.preventDefault();
     const sel = window.getSelection(), text = sel?.toString().trim();
-    if (!text || text.length < 2) { showToast("✋ Select text first, then press Alt+T"); return; }
+    if (!text || text.length < 2) { showToast(" Select text first, then press Alt+T"); return; }
     let sr = null; try { sr = sel.getRangeAt(0).cloneRange(); } catch {}
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     hideTooltipEl();
