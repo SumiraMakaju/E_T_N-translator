@@ -66,7 +66,7 @@ let _speechSynth   = window.speechSynthesis;
 let _voiceCache    = null;
 
 function getVoices() {
-  if (_voiceCache) return _voiceCache;
+  if (_voiceCache && _voiceCache.length > 0) return _voiceCache;
   _voiceCache = _speechSynth?.getVoices() || [];
   return _voiceCache;
 }
@@ -96,18 +96,38 @@ let _activeSpeech = null;
 function speakText(text, accentKey = _currentAccent) {
   if (!_speechSynth) { showToast("🔇 Speech not supported in this browser."); return; }
   _speechSynth.cancel();
+  
   const utter = new SpeechSynthesisUtterance(text);
-  const cfg   = ACCENTS[accentKey] || ACCENTS["US English"];
-  const voice = pickVoice(accentKey);
-  utter.lang  = cfg.lang;
+  const isDevanagari = /[\u0900-\u097F]/.test(text);
+  let voice = null;
+
+  if (isDevanagari) {
+    // For Nepali/Tamang, look for a Nepali or Hindi voice (Hindi reads Devanagari script perfectly)
+    const voices = getVoices();
+    voice = voices.find(v => v.lang.startsWith("ne")) || voices.find(v => v.lang.startsWith("hi"));
+    utter.lang = voice ? voice.lang : "hi-IN"; // Fallback to Hindi locale
+    
+    if (!voice && voices.length > 0) {
+      showToast("⚠ No Nepali/Hindi voice pack installed on your OS.", 3500);
+    }
+  } else {
+    // English text
+    const cfg = ACCENTS[accentKey] || ACCENTS["US English"];
+    utter.lang = cfg.lang;
+    voice = pickVoice(accentKey);
+  }
+
   utter.rate  = 0.92;
   utter.pitch = 1.0;
   if (voice) utter.voice = voice;
+  
   utter.onstart = () => { _activeSpeech = utter; };
   utter.onend   = () => { _activeSpeech = null;  };
   utter.onerror = (e) => {
     _activeSpeech = null;
-    if (e.error !== "interrupted") showToast("🔇 Speech error: " + e.error, 2500);
+    if (e.error !== "interrupted" && e.error !== "canceled") {
+      showToast("🔇 Speech error: " + e.error, 2500);
+    }
   };
   _speechSynth.speak(utter);
   _activeSpeech = utter;
@@ -444,9 +464,11 @@ async function translateInline(selection, tgt_lang) {
     wrapper.setAttribute("data-tmt-inline", "true");
     wrapper.className = "tmt-translated";
     wrapper.title     = `Original: ${selectedText} | Alt+Z to restore`;
+    wrapper.style.whiteSpace = "pre-wrap"; // Preserve newlines
     wrapper.textContent = response.output;
 
-    range.deleteContents();
+    const originalFragment = range.extractContents();
+    wrapper._tmtOriginalFragment = originalFragment;
     range.insertNode(wrapper);
     sel2.removeAllRanges();
     window.scrollTo(0, scrollY);
@@ -462,7 +484,11 @@ function deTranslateLast() {
   while (translatedNodes.length && !document.contains(translatedNodes.at(-1))) translatedNodes.pop();
   if (!translatedNodes.length) { showToast("Nothing to restore."); return; }
   const w = translatedNodes.pop();
-  w.replaceWith(document.createTextNode(w.getAttribute("data-original")));
+  if (w._tmtOriginalFragment) {
+    w.replaceWith(w._tmtOriginalFragment);
+  } else {
+    w.replaceWith(document.createTextNode(w.getAttribute("data-original")));
+  }
   showToast("↩ Restored original text");
 }
 
@@ -472,7 +498,13 @@ function deTranslateAll() {
     "tmt-inline[data-tmt-inline], span[data-tmt-inline]"
   );
   if (!all.length) { showToast("No inline translations to restore."); return; }
-  all.forEach(w => w.replaceWith(document.createTextNode(w.getAttribute("data-original"))));
+  all.forEach(w => {
+    if (w._tmtOriginalFragment) {
+      w.replaceWith(w._tmtOriginalFragment);
+    } else {
+      w.replaceWith(document.createTextNode(w.getAttribute("data-original")));
+    }
+  });
   translatedNodes.length = 0;
   showToast(`↩ Restored ${all.length} translation${all.length !== 1 ? "s" : ""}`);
 }

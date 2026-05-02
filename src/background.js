@@ -6,6 +6,7 @@ const CODE_RE  = /`[^`\n]{1,200}`/g;
 const VER_RE   = /\bv?\d+\.\d+(?:\.\d+)*(?:-[\w.]+)?\b/g;
 const FILE_RE  = /\b[\w.-]+\.(?:js|ts|jsx|tsx|py|go|rs|java|cpp|c|h|css|html|json|yaml|yml|md|txt|env|sh|bat)\b/gi;
 const HEX_RE   = /#[0-9a-fA-F]{6}\b/g;
+const NEWLINE_RE = /\n+/g;
 
 const BRAND_WORDS = [
   "Gmail","Google","YouTube","Drive","Chrome","Firebase","Gemini","Maps",
@@ -28,6 +29,7 @@ const PROTECT_RE = new RegExp(
     VER_RE.source,
     FILE_RE.source,
     HEX_RE.source,
+    NEWLINE_RE.source,
     `\\b(?:${BRAND_WORDS.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`,
   ].join("|"),
   "gi"

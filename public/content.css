@@ -10,6 +10,7 @@ tmt-inline.tmt-translated {
   padding: 0 2px;
   transition: background 0.25s, filter 0.2s;
   position: relative;
+  white-space: pre-wrap;
 }
 tmt-inline.tmt-translated:hover {
   background: linear-gradient(120deg,
