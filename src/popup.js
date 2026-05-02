@@ -36,7 +36,7 @@ document.getElementById("swap-btn")?.addEventListener("click", () => {
   [srcSelect.value, tgtSelect.value] = [tgtSelect.value, srcSelect.value];
 });
 
-// Page translate button — sends message to active tab
+// Page translate button 
 pageTransBtn?.addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;

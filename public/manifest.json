@@ -29,9 +29,16 @@
     {
       "matches": ["<all_urls>"],
       "js": ["video-engine.js"],
+      "css": ["video-engine.css"],
       "run_at": "document_idle"
     }
   ],
+  "web_accessible_resources": [
+  {
+    "resources": ["icons/*"],
+    "matches": ["<all_urls>"]
+  }
+],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -68,4 +75,5 @@
       "description": "Open Video Subtitle Translate panel"
     }
   }
+  
 }

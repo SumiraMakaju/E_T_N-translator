@@ -35,7 +35,7 @@ toggleVisBtn?.addEventListener("click", () => {
 saveBtn?.addEventListener("click", async () => {
   const key = apiKeyInput.value.trim();
   if (!key) { setKeyStatus("Please enter an API key.", "error"); return; }
-  if (!key.startsWith("team_")) setKeyStatus("⚠ Key should start with 'team_' — double-check.", "error");
+  if (!key.startsWith("team_")) setKeyStatus("⚠ Key should start with 'team_' double-check.", "error");
   await chrome.storage.sync.set({ apiKey: key });
   setKeyStatus("✓ API key saved!", "saved");
   setTimeout(() => setKeyStatus("", ""), 3000);

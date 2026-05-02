@@ -209,7 +209,7 @@ export async function translatePage(tgt_lang, apiKey) {
         node.parentNode?.replaceChild(wrapper, node);
         _pageTranslatedNodes.push(wrapper);
       } catch (err) {
-        // Skip failed nodes silently — don't block the rest
+        // Skip failed nodes silently  don't block the rest
         console.warn("TMT page-engine: skip node:", err.message);
       }
 

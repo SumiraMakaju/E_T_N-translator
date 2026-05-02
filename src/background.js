@@ -123,7 +123,7 @@ async function handleTranslation(text, src_lang, tgt_lang) {
 
   const parts = splitText(text);
 
-  // If every part is protected, return original unchanged — no API call
+  // If every part is protected, return original unchanged   no API call
   if (parts.every(p => p.type === "protected")) {
     return { success: true, output: text, skipped: true };
   }
@@ -131,7 +131,7 @@ async function handleTranslation(text, src_lang, tgt_lang) {
   let finalOutput = "";
 
   for (const part of parts) {
-    // ✅ Protected content passes through verbatim — no translation
+    //   Protected content passes through verbatim   no translation
     if (part.type === "protected") {
       finalOutput += part.value;
       continue;
@@ -167,10 +167,10 @@ async function handleTranslation(text, src_lang, tgt_lang) {
         const trailing = part.value.match(/\s*$/)[0];
         finalOutput += leading + data.output + trailing;
       } else {
-        finalOutput += part.value; // API error — keep original
+        finalOutput += part.value; // API error   keep original
       }
     } catch {
-      finalOutput += part.value; // Network error — keep original
+      finalOutput += part.value; // Network error   keep original
     }
   }
 
@@ -183,7 +183,7 @@ async function saveToHistory(entry) {
   const updated = [{ ...entry, timestamp: Date.now() }, ...history].slice(0, 10);
   await chrome.storage.local.set({ history: updated });
 }
-// VIDEO TRANSLATION — Whisper + Tab Capture
+// VIDEO TRANSLATION  Whisper + Tab Capture
 
 const WHISPER_URL = "https://api.openai.com/v1/audio/transcriptions";
 

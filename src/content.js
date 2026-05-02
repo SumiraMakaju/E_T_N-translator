@@ -178,7 +178,6 @@ function pauseSVG() {
   </svg>`;
 }
 
-// PAGE ENGINE — with Gmail-aware root selection
 
 const SKIP_TAGS = new Set([
   "SCRIPT","STYLE","NOSCRIPT","CODE","PRE","KBD","SAMP","VAR",
@@ -214,13 +213,13 @@ function shouldSkipNode(el) {
 function getTranslationRoot() {
   if (!IS_GMAIL) return document.body;
 
-  // Open email reading pane — Gmail's message body lives here
+  // Open email reading pane Gmail's message body lives here
   const msgBody = document.querySelector(
     ".a3s.aiL, .gs .ii.gt, [data-message-id] .a3s"
   );
   if (msgBody) return msgBody;
 
-  // Inbox/list view — subject lines and snippet text
+  // Inbox/list view subject lines and snippet text
   const inbox = document.querySelector(".AO, .BltHke");
   if (inbox) return inbox;
 
@@ -341,7 +340,7 @@ async function translatePage(tgt_lang, apiKey) {
       } catch (err) {
         if (err.message === "NO_API_KEY") {
           _cancelRequested = true;
-          _progressCb?.({ status: "error", message: "No API key — open Settings." });
+          _progressCb?.({ status: "error", message: "No API key open Settings." });
           return;
         }
         if (err.message.includes("context invalidated")) {
@@ -386,7 +385,7 @@ function startGmailObserver() {
       _lastGmailMsgId = msgId;
       // Show a toast nudge so user knows they can translate the new email
       if (pagePanel?.classList.contains("tmt-pp-visible")) {
-        showToast("📧 New email opened — press Translate Page to translate it.", 3500);
+        showToast("new email opened press Translate Page to translate it.", 3500);
         // Reset panel back to setup view so user can retranslate
         restorePageTranslation();
         switchView("setup");
@@ -421,7 +420,7 @@ async function translateInline(selection, tgt_lang) {
 
   if (!response?.success) {
     showToast("⚠ " + (response?.error === "NO_API_KEY"
-      ? "No API key — open Settings."
+      ? "No API key: open Settings."
       : (response?.error || "Translation failed")), 3500);
     return;
   }
@@ -453,7 +452,7 @@ async function translateInline(selection, tgt_lang) {
     window.scrollTo(0, scrollY);
 
     translatedNodes.push(wrapper);
-    showToast(`✓ Translated to ${langName(tgt_lang)} — Alt+Z to undo`);
+    showToast(`✓ Translated to ${langName(tgt_lang)}  Alt+Z to undo`);
   } catch {
     showToast("⚠ Could not replace text here.", 3000);
   }
@@ -478,7 +477,7 @@ function deTranslateAll() {
   showToast(`↩ Restored ${all.length} translation${all.length !== 1 ? "s" : ""}`);
 }
 
-// TOOLTIP — with 🔊 voice playback (unchanged from v3)
+// TOOLTIP  with voice playback
 
 
 function createTooltip() {
@@ -487,10 +486,6 @@ function createTooltip() {
   el.innerHTML = `
     <div class="tmt-header">
       <div class="tmt-logo">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
         TMT
       </div>
       <div class="tmt-lang-row">
@@ -530,7 +525,7 @@ function createTooltip() {
     <div class="tmt-actions">
       <div class="tmt-action-left">
         <button id="tmt-speak-out" class="tmt-btn-speak" style="display:none">
-          ${speakerSVG()} 🔊 Speak
+          ${speakerSVG()}  Speak
         </button>
         <button id="tmt-replace" class="tmt-btn-replace" style="display:none">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
@@ -939,7 +934,7 @@ async function startPageTranslate(tgt_lang) {
   const result = await new Promise(r => chrome.storage.sync.get("apiKey", r));
   const apiKey = result.apiKey;
   if (!apiKey) {
-    showToast("⚠ No API key — click the TMT icon → Settings.", 4000); return;
+    showToast("⚠ No API key: click the TMT icon → Settings.", 4000); return;
   }
 
   isPageTranslating = true;
