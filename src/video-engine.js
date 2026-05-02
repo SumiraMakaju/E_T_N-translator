@@ -422,7 +422,7 @@ function createPanel() {
       </div>
 
       <div class="tmt-vp-row">
-        <=div class="tmt-vp-label">Audio lang</=div>
+        <div class="tmt-vp-label">Audio lang</div>
         <select id="tmt-whisper-lang" class="tmt-vp-select">
           <option value="auto">Auto-detect</option>
           <option value="en">English</option>
