@@ -215,7 +215,7 @@ function tryDOMCaption() {
 }
 
 function watchDOMCaptions(initial) {
-  setStatus("Captions found translating live", "ok");
+  setStatus("✓ Captions found translating live", "ok");
   domCaptionObserver = new MutationObserver(() => {
     const container = findDOMCaptionContainer() || initial;
     const text =
@@ -343,7 +343,7 @@ async function startSmartTranslation(video) {
       return;
     }
   }
-  setStatus("Checking for captions…", "info");
+  setStatus("🔍 Checking for DOM captions…", "info");
   await new Promise((r) => setTimeout(r, 600));
   let domFound = false;
   for (let i = 0; i < 10; i++) {
@@ -355,7 +355,7 @@ async function startSmartTranslation(video) {
   }
   if (domFound) {
     if (tryDOMCaption()) {
-      updateModeIndicator("Captions");
+      updateModeIndicator("🖥 DOM Captions");
       return;
     }
   }
@@ -400,15 +400,15 @@ function createPanel() {
 
      <div class="tmt-vp-header">
       <div class="tmt-vp-brand">
-    <img src="${iconUrl}" alt="icon" width="35" height="35" />
+      <img src="${iconUrl}" alt="icon" width="35" height="35" />
         Video Translate
        </div>
-        <div class="tmt-vp-header-right">
+       </div>
+      <div class="tmt-vp-header-right">
         <button class="tmt-vp-min" id="tmt-vp-min" title="Minimise">—</button>
         <button class="tmt-vp-close" id="tmt-vp-close" title="Close">×</button>
-        </div>
       </div>
-      
+    </div>
 
     <div class="tmt-vp-body" id="tmt-vp-body">
 
@@ -422,7 +422,7 @@ function createPanel() {
       </div>
 
       <div class="tmt-vp-row">
-        <div class="tmt-vp-label">Audio lang</div>
+        <=div class="tmt-vp-label">Audio lang</=div>
         <select id="tmt-whisper-lang" class="tmt-vp-select">
           <option value="auto">Auto-detect</option>
           <option value="en">English</option>
