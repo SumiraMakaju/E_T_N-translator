@@ -372,6 +372,7 @@ function createPanel() {
        </div>
       <div class="tmt-vp-header-right">
         <button class="tmt-vp-min" id="tmt-vp-min" title="Minimise">—</button>
+        <button class="tmt-vp-close" id="tmt-vp-close" title="Close">×</button>
       </div>
     </div>
 

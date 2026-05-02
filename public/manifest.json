@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "TMT Translator — English · Nepali · Tamang",
+  "name": "TMT Translator: English Nepali Tamang",
   "version": "3.0.0",
   "description": "Smart trilingual translation with page translate, voice playback, video subtitle translation via Whisper + YouTube captions.",
   "permissions": [

@@ -1,9 +1,7 @@
-// build.js — compiles src/ → dist/ and inlines .env values
 const esbuild = require("esbuild");
 const fs = require("fs");
 const path = require("path");
 
-// Load .env if it exists (won't crash if missing)
 try { require("dotenv").config(); } catch {}
 
 const dist = path.join(__dirname, "dist");
@@ -19,9 +17,7 @@ function copyDir(src, dst) {
 
 function copyPublic() {
   if (!fs.existsSync(pub)) {
-    console.error(`\n❌  Missing "public/" folder.\n`);
-    console.error(`    This folder contains manifest.json, HTML, CSS, and icons.`);
-    console.error(`    Make sure you cloned/extracted the FULL project zip.\n`);
+    console.error(`\n❌  Missing "public/" folder — make sure you have the full project.\n`);
     process.exit(1);
   }
   fs.mkdirSync(dist, { recursive: true });
@@ -37,13 +33,14 @@ const define = {
 
 async function build() {
   copyPublic();
+
   await esbuild.build({
     entryPoints: [
       "src/background.js",
       "src/content.js",
+      "src/video-engine.js",   
       "src/popup.js",
       "src/options.js",
-      "src/page-engine.js",
     ],
     bundle: true,
     outdir: dist,
@@ -53,7 +50,13 @@ async function build() {
     minify: true,
     logLevel: "info",
   });
-  console.log("✓ Build complete", dist);
+
+  
+  const stray = path.join(dist, "page-engine.js");
+  if (fs.existsSync(stray)) fs.unlinkSync(stray);
+
+  console.log("✓ Build complete →", dist);
+  console.log("  page-engine.js bundled inside content.js ✓");
   console.log("\nLoad the dist/ folder in Chrome:");
   console.log("   chrome://extensions → Developer Mode ON → Load unpacked → select dist/\n");
 }

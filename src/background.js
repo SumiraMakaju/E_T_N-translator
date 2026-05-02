@@ -1,4 +1,4 @@
-const API_URL = "https://tmt.ilprl.ku.edu.np/api"; 
+const API_URL = process.env.TMT_API_URL;
 
 const EMAIL_RE = /\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b/gi;
 const URL_RE   = /\bhttps?:\/\/[^\s<>"'`]+/gi;
