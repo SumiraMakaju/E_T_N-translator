@@ -87,7 +87,7 @@ async function doTranslate() {
 
 function showOutput(text, isError) {
   outputText.textContent = text;
-  outputText.style.color = isError ? "#fb923c" : "#f0f9ff";
+  outputText.style.color = isError ? "#fb923c" : "#4a2705";
   copyBtn.style.display  = isError ? "none" : "flex";
   outputWrap.style.display = "block";
 }

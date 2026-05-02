@@ -366,13 +366,12 @@ function createPanel() {
 
      <div class="tmt-vp-header">
       <div class="tmt-vp-brand">
-      <img src="${iconUrl}" alt="icon" width="13" height="13" />
-          TMT Video Translate
+      <img src="${iconUrl}" alt="icon" width="35" height="35" />
+        Video Translate
        </div>
        </div>
       <div class="tmt-vp-header-right">
         <button class="tmt-vp-min" id="tmt-vp-min" title="Minimise">—</button>
-        <button class="tmt-vp-close" id="tmt-vp-close">✕</button>
       </div>
     </div>
 
@@ -403,14 +402,12 @@ function createPanel() {
       </div>
 
       <div class="tmt-vp-info">
-        <strong>Auto mode:</strong> checks for captions first (CC/subtitles), then falls back to
-        Whisper audio transcription. Works on YouTube, Vimeo, Netflix, and any video site.
-        <br><br>Requires <strong>CC enabled</strong> on the video for best results.
+        Requires <strong>CC enabled</strong> on the video for best results.
         Whisper requires an OpenAI key in Settings.
       </div>
 
       <div id="tmt-vp-mode" class="tmt-vp-mode-badge" style="display:none">
-        🔍 Auto
+       Auto
       </div>
 
       <div id="tmt-vp-status" class="tmt-vp-status" style="display:none"></div>

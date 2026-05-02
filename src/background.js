@@ -1,4 +1,4 @@
-const API_URL = process.env.TMT_API_URL;
+const API_URL = "https://tmt.ilprl.ku.edu.np/api"; 
 
 const EMAIL_RE = /\b[\w.+-]+@[\w-]+\.[a-z]{2,}\b/gi;
 const URL_RE   = /\bhttps?:\/\/[^\s<>"'`]+/gi;
@@ -20,7 +20,6 @@ const BRAND_WORDS = [
   "TMT"
 ];
 
-// One combined regex that matches anything we want to protect
 const PROTECT_RE = new RegExp(
   [
     EMAIL_RE.source,
@@ -34,12 +33,11 @@ const PROTECT_RE = new RegExp(
   "gi"
 );
 
-// Split text into protected / translatable segments
 function splitText(text) {
   const parts = [];
   let lastIndex = 0;
   let match;
-  const re = new RegExp(PROTECT_RE.source, "gi"); // fresh instance to reset lastIndex
+  const re = new RegExp(PROTECT_RE.source, "gi");
 
   while ((match = re.exec(text)) !== null) {
     if (match.index > lastIndex) {
@@ -55,8 +53,6 @@ function splitText(text) {
 
   return parts;
 }
-
-// CONTEXT MENU
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
@@ -91,6 +87,7 @@ async function safeSend(tabId, message) {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === "tmt-translate" && info.selectionText)
     safeSend(tab.id, { type: "TRANSLATE_SELECTION", text: info.selectionText.trim() });
+
   if (info.menuItemId === "tmt-translate-page")
     safeSend(tab.id, { type: "OPEN_PAGE_PANEL" });
 });
@@ -98,22 +95,62 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 chrome.commands.onCommand.addListener(async command => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
-  if (command === "translate-selection") safeSend(tab.id, { type: "KEYBOARD_TRANSLATE" });
-  if (command === "detranslate-last")    safeSend(tab.id, { type: "DETRANSLATE_LAST" });
-  if (command === "open-page-panel")     safeSend(tab.id, { type: "OPEN_PAGE_PANEL" });
+
+  if (command === "translate-selection")
+    safeSend(tab.id, { type: "KEYBOARD_TRANSLATE" });
+
+  if (command === "detranslate-last")
+    safeSend(tab.id, { type: "DETRANSLATE_LAST" });
+
+  if (command === "open-page-panel")
+    safeSend(tab.id, { type: "OPEN_PAGE_PANEL" });
 });
 
-// TRANSLATION HANDLER
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
   if (message.type === "TRANSLATE") {
     handleTranslation(message.text, message.src_lang, message.tgt_lang)
       .then(sendResponse)
       .catch(err => sendResponse({ success: false, error: err.message }));
-    return true; // keep channel open for async
+    return true;
   }
+
+  if (message.type === "START_TAB_CAPTURE") {
+    const tabId = sender.tab?.id;
+
+    if (!tabId) {
+      sendResponse({ error: "No tab ID" });
+      return;
+    }
+
+    chrome.tabCapture.getMediaStreamId(
+      { targetTabId: tabId },
+      (streamId) => {
+        if (chrome.runtime.lastError) {
+          sendResponse({ error: chrome.runtime.lastError.message });
+        } else {
+          sendResponse({ streamId });
+        }
+      }
+    );
+
+    return true;
+  }
+
+  if (message.type === "WHISPER_TRANSCRIBE") {
+    handleWhisper(message, sender)
+      .then(sendResponse)
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
   if (message.type === "OPEN_OPTIONS") {
     chrome.runtime.openOptionsPage();
+  }
+
+  if (message.type === "OPEN_VIDEO_PANEL") {
+    const tabId = sender.tab?.id ?? message.tabId;
+    if (tabId) chrome.tabs.sendMessage(tabId, { type: "OPEN_VIDEO_PANEL" });
   }
 });
 
@@ -123,7 +160,6 @@ async function handleTranslation(text, src_lang, tgt_lang) {
 
   const parts = splitText(text);
 
-  // If every part is protected, return original unchanged   no API call
   if (parts.every(p => p.type === "protected")) {
     return { success: true, output: text, skipped: true };
   }
@@ -131,26 +167,25 @@ async function handleTranslation(text, src_lang, tgt_lang) {
   let finalOutput = "";
 
   for (const part of parts) {
-    //   Protected content passes through verbatim   no translation
     if (part.type === "protected") {
       finalOutput += part.value;
       continue;
     }
 
     const clean = part.value.trim();
+
     if (!clean) {
-      finalOutput += part.value; // preserve whitespace
+      finalOutput += part.value;
       continue;
     }
 
-    // Skip tiny fragments that aren't worth translating
     if (clean.length < 2 || /^[\d\s.,:;!?]+$/.test(clean)) {
       finalOutput += part.value;
       continue;
     }
 
     try {
-      const res  = await fetch(API_URL, {
+      const res = await fetch(API_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -162,15 +197,14 @@ async function handleTranslation(text, src_lang, tgt_lang) {
       const data = await res.json();
 
       if (data.message_type === "SUCCESS") {
-        // Preserve any surrounding whitespace from the original part
         const leading  = part.value.match(/^\s*/)[0];
         const trailing = part.value.match(/\s*$/)[0];
         finalOutput += leading + data.output + trailing;
       } else {
-        finalOutput += part.value; // API error   keep original
+        finalOutput += part.value;
       }
     } catch {
-      finalOutput += part.value; // Network error   keep original
+      finalOutput += part.value;
     }
   }
 
@@ -183,62 +217,27 @@ async function saveToHistory(entry) {
   const updated = [{ ...entry, timestamp: Date.now() }, ...history].slice(0, 10);
   await chrome.storage.local.set({ history: updated });
 }
-// VIDEO TRANSLATION  Whisper + Tab Capture
 
 const WHISPER_URL = "https://api.openai.com/v1/audio/transcriptions";
 
-// Tab capture: returns a stream ID the content script uses with getUserMedia
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "START_TAB_CAPTURE") {
-    const tabId = sender.tab?.id;
-    if (!tabId) { sendResponse({ error: "No tab ID" }); return; }
-
-    chrome.tabCapture.getMediaStreamId(
-      { targetTabId: tabId },
-      (streamId) => {
-        if (chrome.runtime.lastError) {
-          sendResponse({ error: chrome.runtime.lastError.message });
-        } else {
-          sendResponse({ streamId });
-        }
-      }
-    );
-    return true; // async
-  }
-
-  if (message.type === "WHISPER_TRANSCRIBE") {
-    handleWhisper(message, sender).then(sendResponse).catch(err =>
-      sendResponse({ success: false, error: err.message })
-    );
-    return true;
-  }
-
-  if (message.type === "OPEN_VIDEO_PANEL") {
-    // Forward to content script
-    const tabId = sender.tab?.id ?? message.tabId;
-    if (tabId) chrome.tabs.sendMessage(tabId, { type: "OPEN_VIDEO_PANEL" });
-  }
-});
-
-async function handleWhisper(message, sender) {
-  const { apiKey: tmtKey, openaiKey } = await chrome.storage.sync.get(["apiKey", "openaiKey"]);
+async function handleWhisper(message) {
+  const { openaiKey } = await chrome.storage.sync.get("openaiKey");
 
   if (!openaiKey) return { success: false, error: "NO_OPENAI_KEY" };
 
-  // Reconstruct audio blob from byte array
   const bytes = new Uint8Array(message.audioBytes);
   const blob  = new Blob([bytes], { type: message.mimeType || "audio/webm" });
   const form  = new FormData();
 
-  form.append("file",  blob, "audio.webm");
+  form.append("file", blob, "audio.webm");
   form.append("model", "whisper-1");
   if (message.language) form.append("language", message.language);
   form.append("response_format", "json");
 
-  const res  = await fetch(WHISPER_URL, {
-    method:  "POST",
+  const res = await fetch(WHISPER_URL, {
+    method: "POST",
     headers: { "Authorization": `Bearer ${openaiKey}` },
-    body:    form,
+    body: form,
   });
 
   if (!res.ok) {

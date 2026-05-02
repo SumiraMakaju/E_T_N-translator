@@ -794,14 +794,12 @@ function hideLangPicker() {
 
 function createPagePanel() {
   const el = document.createElement("div");
+  const iconUrl = chrome.runtime.getURL("icons/icon16.png");
   el.id = "tmt-page-panel";
   el.innerHTML = `
     <div class="tmt-pp-header">
       <div class="tmt-pp-brand">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+       <img src="${iconUrl}" alt="icon" width="35" height="35" /> 
         Smart Page Translate${IS_GMAIL ? " · Gmail Mode" : ""}
       </div>
       <button class="tmt-pp-close" id="tmt-pp-close">✕</button>
