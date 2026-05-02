@@ -433,7 +433,7 @@ function createPanel() {
 
       <div class="tmt-vp-info">
         Requires <strong>CC enabled</strong> on the video for best results.
-        Whisper requires an OpenAI key in Settings.
+        
       </div>
 
       <div id="tmt-vp-mode" class="tmt-vp-mode-badge" style="display:none">

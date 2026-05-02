@@ -838,7 +838,7 @@ function createPagePanel() {
     </div>
     <div class="tmt-pp-body">
       <div id="tmt-pp-setup" style="display:flex;flex-direction:column;gap:14px">
-        ${IS_GMAIL ? `<div class="tmt-pp-gmail-hint">📧 Opens the current email for translation. Open an email first, then click Translate.</div>` : ""}
+        ${IS_GMAIL ? `<div class="tmt-pp-gmail-hint"> Open an email first, then click Translate.</div>` : ""}
         <div class="tmt-pp-lang-group">
           <span class="tmt-pp-lang-label">Translate to</span>
           <div class="tmt-pp-lang-btns">

@@ -9,7 +9,8 @@
     "contextMenus",
     "scripting",
     "tabs",
-    "tabCapture"
+    "tabCapture",
+    "offscreen"
   ],
   "host_permissions": [
     "https://tmt.ilprl.ku.edu.np/*",
