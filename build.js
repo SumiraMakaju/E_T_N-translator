@@ -17,7 +17,7 @@ function copyDir(src, dst) {
 
 function copyPublic() {
   if (!fs.existsSync(pub)) {
-    console.error(`\n❌  Missing "public/" folder — make sure you have the full project.\n`);
+    console.error(`\n  Missing "public/" folder — make sure you have the full project.\n`);
     process.exit(1);
   }
   fs.mkdirSync(dist, { recursive: true });

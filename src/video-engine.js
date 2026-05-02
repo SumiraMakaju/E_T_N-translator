@@ -194,7 +194,7 @@ function tryDOMCaption() {
 }
 
 function watchDOMCaptions(initial) {
-  setStatus("✓ Captions found translating live", "ok");
+  setStatus("Captions found translating live", "ok");
   domCaptionObserver = new MutationObserver(() => {
     const container = findDOMCaptionContainer() || initial;
     const text = container?.innerText?.trim() || container?.textContent?.trim() || "";
@@ -313,7 +313,7 @@ async function startSmartTranslation(video) {
       return;
     }
   }
-  setStatus("🔍 Checking for DOM captions…", "info");
+  setStatus("Checking for captions…", "info");
   await new Promise(r => setTimeout(r, 600));
   let domFound = false;
   for (let i = 0; i < 10; i++) {
@@ -322,7 +322,7 @@ async function startSmartTranslation(video) {
   }
   if (domFound) {
     if (tryDOMCaption()) {
-      updateModeIndicator("🖥 DOM Captions");
+      updateModeIndicator("Captions");
       return;
     }
   }
