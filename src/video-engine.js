@@ -400,15 +400,15 @@ function createPanel() {
 
      <div class="tmt-vp-header">
       <div class="tmt-vp-brand">
-      <img src="${iconUrl}" alt="icon" width="35" height="35" />
+    <img src="${iconUrl}" alt="icon" width="35" height="35" />
         Video Translate
        </div>
-       </div>
-      <div class="tmt-vp-header-right">
+        <div class="tmt-vp-header-right">
         <button class="tmt-vp-min" id="tmt-vp-min" title="Minimise">—</button>
         <button class="tmt-vp-close" id="tmt-vp-close" title="Close">×</button>
+        </div>
       </div>
-    </div>
+      
 
     <div class="tmt-vp-body" id="tmt-vp-body">
 
