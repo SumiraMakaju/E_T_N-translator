@@ -7,7 +7,7 @@
     "dev": "node build.js --watch"
   },
   "devDependencies": {
-    "esbuild": "^0.20.2",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "esbuild": "^0.20.2"
   }
 }

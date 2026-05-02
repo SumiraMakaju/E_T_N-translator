@@ -1,8 +1,14 @@
 const TMT_SUBTITLE_ID = "tmt-subtitle-overlay";
-const TMT_PANEL_ID    = "tmt-video-panel";
-const CHUNK_MS        = 6000;
+const TMT_PANEL_ID = "tmt-video-panel";
+const CHUNK_MS = 6000;
 
-function isAlive() { try { return !!chrome.runtime?.id; } catch { return false; } }
+function isAlive() {
+  try {
+    return !!chrome.runtime?.id;
+  } catch {
+    return false;
+  }
+}
 
 function safeSend(msg, cb) {
   if (!isAlive()) return;
@@ -25,24 +31,24 @@ function detectLang(text) {
   return "en";
 }
 
-let activeVideo   = null;
-let subtitleEl    = null;
-let panelEl       = null;
+let activeVideo = null;
+let subtitleEl = null;
+let panelEl = null;
 let isTranslating = false;
-let captureMode   = "idle";
-let tgtLang       = "ne";
-let whisperLang   = "auto";
-let clearTimer    = null;
-let modeLabel     = "Auto";
+let captureMode = "idle";
+let tgtLang = "ne";
+let whisperLang = "auto";
+let clearTimer = null;
+let modeLabel = "Auto";
 
-const cueCache  = new Map();
+const cueCache = new Map();
 let lastCueText = "";
 
 function injectCSS() {
   if (document.getElementById("tmt-engine-css")) return;
   const link = document.createElement("link");
-  link.id   = "tmt-engine-css";
-  link.rel  = "stylesheet";
+  link.id = "tmt-engine-css";
+  link.rel = "stylesheet";
   link.href = chrome.runtime.getURL("video-engine.css");
   document.head.appendChild(link);
 }
@@ -60,11 +66,11 @@ function positionSubtitle() {
   if (!activeVideo || !subtitleEl) return;
   const rect = activeVideo.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
-  const bottomOffset = window.innerHeight - rect.bottom + rect.height * 0.10;
+  const bottomOffset = window.innerHeight - rect.bottom + rect.height * 0.1;
   subtitleEl.style.bottom = Math.max(8, bottomOffset) + "px";
-  subtitleEl.style.left   = rect.left + "px";
-  subtitleEl.style.right  = "auto";
-  subtitleEl.style.width  = rect.width + "px";
+  subtitleEl.style.left = rect.left + "px";
+  subtitleEl.style.right = "auto";
+  subtitleEl.style.width = rect.width + "px";
 }
 
 window.addEventListener("scroll", () => positionSubtitle(), { passive: true });
@@ -81,7 +87,10 @@ function showSubtitle(text, durationMs = 4500, mode = captureMode) {
   el.classList.add("tmt-sub-visible");
   clearTimeout(clearTimer);
   if (durationMs > 0)
-    clearTimer = setTimeout(() => el?.classList.remove("tmt-sub-visible"), durationMs);
+    clearTimer = setTimeout(
+      () => el?.classList.remove("tmt-sub-visible"),
+      durationMs,
+    );
   const pText = document.getElementById("tmt-vp-sub-text");
   const pWrap = document.getElementById("tmt-vp-sub-preview");
   if (pText) pText.textContent = text.trim();
@@ -99,7 +108,7 @@ function removeSubtitleEl() {
 }
 
 function escHtml(s) {
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function translateAndShow(rawText, durationMs = 4500) {
@@ -107,36 +116,48 @@ function translateAndShow(rawText, durationMs = 4500) {
   if (!text || text === lastCueText) return;
   lastCueText = text;
   const key = `${text}|${tgtLang}`;
-  if (cueCache.has(key)) { showSubtitle(cueCache.get(key), durationMs); return; }
+  if (cueCache.has(key)) {
+    showSubtitle(cueCache.get(key), durationMs);
+    return;
+  }
   const srcLang = detectLang(text);
-  if (srcLang === tgtLang) { showSubtitle(text, durationMs); return; }
-  safeSend({ type: "TRANSLATE", text, src_lang: srcLang, tgt_lang: tgtLang }, (res) => {
-    if (res?.success && res.output) {
-      cueCache.set(key, res.output);
-      showSubtitle(res.output, durationMs);
-    }
-  });
+  if (srcLang === tgtLang) {
+    showSubtitle(text, durationMs);
+    return;
+  }
+  safeSend(
+    { type: "TRANSLATE", text, src_lang: srcLang, tgt_lang: tgtLang },
+    (res) => {
+      if (res?.success && res.output) {
+        cueCache.set(key, res.output);
+        showSubtitle(res.output, durationMs);
+      }
+    },
+  );
 }
 
-let trackCueListener  = null;
+let trackCueListener = null;
 let trackPollInterval = null;
 
 function tryTrackAPI(video) {
   const tracks = Array.from(video.textTracks || []);
   const preferred =
-    tracks.find(t => t.mode === "showing" && /^en/.test(t.language)) ||
-    tracks.find(t => t.mode === "showing") ||
-    tracks.find(t => t.mode !== "disabled") ||
+    tracks.find((t) => t.mode === "showing" && /^en/.test(t.language)) ||
+    tracks.find((t) => t.mode === "showing") ||
+    tracks.find((t) => t.mode !== "disabled") ||
     tracks[0];
   if (!preferred) return false;
-  try { preferred.mode = "hidden"; } catch {}
+  try {
+    preferred.mode = "hidden";
+  } catch {}
   modeLabel = "CC→TMT";
   captureMode = "track";
   trackCueListener = () => {
     const cue = preferred.activeCues?.[0];
     if (!cue) return;
     const text = (cue.text || "").replace(/<[^>]+>/g, "").trim();
-    if (text) translateAndShow(text, (cue.endTime - cue.startTime) * 1000 || 4500);
+    if (text)
+      translateAndShow(text, (cue.endTime - cue.startTime) * 1000 || 4500);
   };
   preferred.addEventListener("cuechange", trackCueListener);
   trackPollInterval = setInterval(() => {
@@ -172,7 +193,7 @@ const DOM_CAPTION_SELECTORS = [
 ];
 
 let domCaptionObserver = null;
-let domPollInterval    = null;
+let domPollInterval = null;
 
 function findDOMCaptionContainer() {
   for (const sel of DOM_CAPTION_SELECTORS) {
@@ -197,11 +218,14 @@ function watchDOMCaptions(initial) {
   setStatus("✓ Captions found translating live", "ok");
   domCaptionObserver = new MutationObserver(() => {
     const container = findDOMCaptionContainer() || initial;
-    const text = container?.innerText?.trim() || container?.textContent?.trim() || "";
+    const text =
+      container?.innerText?.trim() || container?.textContent?.trim() || "";
     if (text) translateAndShow(text, 4500);
   });
   domCaptionObserver.observe(document.body, {
-    childList: true, subtree: true, characterData: true
+    childList: true,
+    subtree: true,
+    characterData: true,
   });
   const text = initial?.innerText?.trim() || "";
   if (text) translateAndShow(text, 4500);
@@ -216,16 +240,19 @@ function stopDOMCaption() {
 }
 
 let mediaRecorder = null;
-let audioChunks   = [];
-let chunkTimer    = null;
+let audioChunks = [];
+let chunkTimer = null;
 
 async function startWhisperMode() {
   captureMode = "whisper";
-  modeLabel   = "Whisper";
+  modeLabel = "Whisper";
   setStatus("🎙 Requesting tab audio capture…", "info");
   safeSend({ type: "START_TAB_CAPTURE" }, async (res) => {
     if (!res?.streamId) {
-      setStatus("⚠ Tab audio capture failed. Check extension permissions.", "error");
+      setStatus(
+        "⚠ Tab audio capture failed. Check extension permissions.",
+        "error",
+      );
       isTranslating = false;
       resetButtons();
       return;
@@ -236,7 +263,7 @@ async function startWhisperMode() {
           mandatory: {
             chromeMediaSource: "tab",
             chromeMediaSourceId: res.streamId,
-          }
+          },
         },
         video: false,
       });
@@ -281,16 +308,19 @@ function startChunkedRecording(stream) {
 
 async function sendChunkToWhisper(audioBlob) {
   const arrayBuf = await audioBlob.arrayBuffer();
-  const bytes    = Array.from(new Uint8Array(arrayBuf));
-  safeSend({
-    type:       "WHISPER_TRANSCRIBE",
-    audioBytes: bytes,
-    mimeType:   audioBlob.type,
-    language:   whisperLang === "auto" ? undefined : whisperLang,
-  }, (res) => {
-    if (!res?.success || !res.transcript?.trim()) return;
-    translateAndShow(res.transcript.trim(), CHUNK_MS + 1000);
-  });
+  const bytes = Array.from(new Uint8Array(arrayBuf));
+  safeSend(
+    {
+      type: "WHISPER_TRANSCRIBE",
+      audioBytes: bytes,
+      mimeType: audioBlob.type,
+      language: whisperLang === "auto" ? undefined : whisperLang,
+    },
+    (res) => {
+      if (!res?.success || !res.transcript?.trim()) return;
+      translateAndShow(res.transcript.trim(), CHUNK_MS + 1000);
+    },
+  );
 }
 
 function stopWhisperMode() {
@@ -298,15 +328,15 @@ function stopWhisperMode() {
   chunkTimer = null;
   if (mediaRecorder?.state !== "inactive") mediaRecorder?.stop();
   mediaRecorder = null;
-  audioChunks   = [];
+  audioChunks = [];
 }
 
 async function startSmartTranslation(video) {
   setStatus(" Detecting captions…", "info");
-  await new Promise(r => setTimeout(r, 800));
+  await new Promise((r) => setTimeout(r, 800));
   if (video.textTracks?.length > 0) {
     setStatus("Found text tracks, connecting…", "info");
-    await new Promise(r => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 400));
     if (tryTrackAPI(video)) {
       setStatus("✓ Caption track active, translating", "ok");
       updateModeIndicator("Text Track");
@@ -314,11 +344,14 @@ async function startSmartTranslation(video) {
     }
   }
   setStatus("🔍 Checking for DOM captions…", "info");
-  await new Promise(r => setTimeout(r, 600));
+  await new Promise((r) => setTimeout(r, 600));
   let domFound = false;
   for (let i = 0; i < 10; i++) {
-    if (findDOMCaptionContainer()) { domFound = true; break; }
-    await new Promise(r => setTimeout(r, 400));
+    if (findDOMCaptionContainer()) {
+      domFound = true;
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 400));
   }
   if (domFound) {
     if (tryDOMCaption()) {
@@ -327,7 +360,7 @@ async function startSmartTranslation(video) {
     }
   }
   setStatus("📡 No captions found switching to audio", "warn");
-  await new Promise(r => setTimeout(r, 800));
+  await new Promise((r) => setTimeout(r, 800));
   updateModeIndicator("🎙 Whisper Audio");
   await startWhisperMode();
 }
@@ -343,8 +376,8 @@ function updateModeIndicator(label) {
 function setStatus(text, type = "info") {
   const el = document.getElementById("tmt-vp-status");
   if (!el) return;
-  el.textContent   = text;
-  el.className     = `tmt-vp-status tmt-vp-status-${type}`;
+  el.textContent = text;
+  el.className = `tmt-vp-status tmt-vp-status-${type}`;
   el.style.display = "block";
 }
 
@@ -356,10 +389,11 @@ function resetButtons() {
 }
 
 function createPanel() {
-  if (document.getElementById(TMT_PANEL_ID)) return document.getElementById(TMT_PANEL_ID);
+  if (document.getElementById(TMT_PANEL_ID))
+    return document.getElementById(TMT_PANEL_ID);
   injectCSS();
   const el = document.createElement("div");
-   const iconUrl = chrome.runtime.getURL("icons/icon16.png");
+  const iconUrl = chrome.runtime.getURL("icons/icon16.png");
   el.id = TMT_PANEL_ID;
   el.innerHTML = `
    
@@ -379,16 +413,16 @@ function createPanel() {
     <div class="tmt-vp-body" id="tmt-vp-body">
 
       <div class="tmt-vp-row">
-        <span class="tmt-vp-label">Translate to</span>
+        <div class="tmt-vp-label">Translate to</div>
         <div class="tmt-vp-lang-btns">
-          <button class="tmt-vp-lang ${tgtLang==="ne"?"active":""}" data-lang="ne">🇳🇵 Nepali</button>
-          <button class="tmt-vp-lang ${tgtLang==="en"?"active":""}" data-lang="en">🇬🇧 English</button>
-          <button class="tmt-vp-lang ${tgtLang==="tmg"?"active":""}" data-lang="tmg">🏔 Tamang</button>
+          <button class="tmt-vp-lang ${tgtLang === "ne" ? "active" : ""}" data-lang="ne">🇳🇵 Nepali</button>
+          <button class="tmt-vp-lang ${tgtLang === "en" ? "active" : ""}" data-lang="en">🇬🇧 English</button>
+          <button class="tmt-vp-lang ${tgtLang === "tmg" ? "active" : ""}" data-lang="tmg">🏔 Tamang</button>
         </div>
       </div>
 
       <div class="tmt-vp-row">
-        <span class="tmt-vp-label">Audio lang</span>
+        <div class="tmt-vp-label">Audio lang</div>
         <select id="tmt-whisper-lang" class="tmt-vp-select">
           <option value="auto">Auto-detect</option>
           <option value="en">English</option>
@@ -439,9 +473,11 @@ function createPanel() {
   document.body.appendChild(el);
   makeDraggable(el);
 
-  el.querySelectorAll(".tmt-vp-lang").forEach(btn => {
+  el.querySelectorAll(".tmt-vp-lang").forEach((btn) => {
     btn.onclick = () => {
-      el.querySelectorAll(".tmt-vp-lang").forEach(b => b.classList.remove("active"));
+      el.querySelectorAll(".tmt-vp-lang").forEach((b) =>
+        b.classList.remove("active"),
+      );
       btn.classList.add("active");
       tgtLang = btn.dataset.lang;
       cueCache.clear();
@@ -468,11 +504,14 @@ function createPanel() {
     if (isTranslating) return;
     if (!activeVideo) {
       activeVideo = findMainVideo();
-      if (!activeVideo) { setStatus("⚠ No video detected on this page.", "error"); return; }
+      if (!activeVideo) {
+        setStatus("⚠ No video detected on this page.", "error");
+        return;
+      }
     }
     isTranslating = true;
     document.getElementById("tmt-vp-start").style.display = "none";
-    document.getElementById("tmt-vp-stop").style.display  = "flex";
+    document.getElementById("tmt-vp-stop").style.display = "flex";
     await startSmartTranslation(activeVideo);
   };
 
@@ -489,19 +528,24 @@ function createPanel() {
 
 function makeDraggable(el) {
   const header = el.querySelector(".tmt-vp-header");
-  let ox = 0, oy = 0, sx = 0, sy = 0;
+  let ox = 0,
+    oy = 0,
+    sx = 0,
+    sy = 0;
   header.style.cursor = "grab";
   header.onmousedown = (e) => {
     if (e.target.closest("button")) return;
     e.preventDefault();
-    sx = e.clientX; sy = e.clientY;
+    sx = e.clientX;
+    sy = e.clientY;
     const rect = el.getBoundingClientRect();
-    ox = rect.left; oy = rect.top;
+    ox = rect.left;
+    oy = rect.top;
     header.style.cursor = "grabbing";
     const move = (e) => {
-      el.style.left   = Math.max(0, ox + e.clientX - sx) + "px";
-      el.style.top    = Math.max(0, oy + e.clientY - sy) + "px";
-      el.style.right  = "auto";
+      el.style.left = Math.max(0, ox + e.clientX - sx) + "px";
+      el.style.top = Math.max(0, oy + e.clientY - sy) + "px";
+      el.style.right = "auto";
       el.style.bottom = "auto";
     };
     const up = () => {
@@ -520,7 +564,7 @@ function stopTranslation() {
   stopDOMCaption();
   stopWhisperMode();
   captureMode = "idle";
-  modeLabel   = "Auto";
+  modeLabel = "Auto";
   clearSubtitles();
   cueCache.clear();
   lastCueText = "";
@@ -535,9 +579,14 @@ function stopAll() {
 }
 
 function findMainVideo() {
-  return [...document.querySelectorAll("video")]
-    .filter(v => v.offsetWidth > 80 && v.offsetHeight > 50)
-    .sort((a, b) => (b.offsetWidth * b.offsetHeight) - (a.offsetWidth * a.offsetHeight))[0] || null;
+  return (
+    [...document.querySelectorAll("video")]
+      .filter((v) => v.offsetWidth > 80 && v.offsetHeight > 50)
+      .sort(
+        (a, b) =>
+          b.offsetWidth * b.offsetHeight - a.offsetWidth * a.offsetHeight,
+      )[0] || null
+  );
 }
 
 function attachToVideo(video) {
@@ -599,7 +648,10 @@ const hrefObserver = new MutationObserver(() => {
     setTimeout(tryAutoAttach, 1500);
   }
 });
-hrefObserver.observe(document.documentElement, { subtree: true, childList: true });
+hrefObserver.observe(document.documentElement, {
+  subtree: true,
+  childList: true,
+});
 
 if (document.readyState === "complete") {
   setTimeout(tryAutoAttach, 500);
